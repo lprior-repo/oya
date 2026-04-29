@@ -1,0 +1,26 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&node"
+---
+{
+  "id": "00000000-0000-0000-0000-000000000004",
+  "name": "Transform Data",
+  "category": "durable",
+  "icon": "play",
+  "x": 400.0,
+  "y": 200.0,
+  "last_output": null,
+  "selected": false,
+  "executing": false,
+  "skipped": false,
+  "node_type": "run",
+  "description": "Run arbitrary code",
+  "config": {
+    "code": "return { result: input * 2 };",
+    "durable_step_name": null,
+    "mapping": {
+      "input": "$.body"
+    },
+    "type": "run"
+  }
+}

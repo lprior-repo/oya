@@ -1,7 +1,8 @@
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
-use crate::lifecycle::types::{BeadId, BeadStatus, CancelState, CompensationDiagnostic};
+use crate::lifecycle::types::{BeadId, BeadStatus, CancelState};
+pub use oya_contracts::{LifecycleGateSnapshot, LifecycleStatusSnapshot, LifecycleStepSnapshot};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -34,40 +35,6 @@ pub struct LifecycleRequest {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct LifecycleStepSnapshot {
-    pub step: String,
-    pub status: String,
-    pub message: Option<String>,
-    pub details: Option<Value>,
-    pub started_at: Option<String>,
-    pub finished_at: Option<String>,
-    pub duration_ms: Option<u64>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct LifecycleGateSnapshot {
-    pub gate_id: String,
-    pub status: String,
-    pub message: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct LifecycleStatusSnapshot {
-    pub bead_id: Option<String>,
-    pub steps: Vec<LifecycleStepSnapshot>,
-    #[serde(default)]
-    pub gates: Vec<LifecycleGateSnapshot>,
-    #[serde(default)]
-    pub discipline_gates: Vec<LifecycleGateSnapshot>,
-    pub state: Option<Value>,
-    pub pr_url: Option<String>,
-    pub done: bool,
-    pub success: Option<bool>,
-    pub message: Option<String>,
-    pub compensation_diagnostics: Vec<CompensationDiagnostic>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct KeyRequest {
     pub key: String,
 }
@@ -97,4 +64,37 @@ pub struct CancelResponse {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct StartResponse {
     pub output: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct OpenCodeTraceEvent {
+    pub sequence: u64,
+    pub received_at: String,
+    pub kind: String,
+    pub step: Option<u64>,
+    pub tool: Option<String>,
+    pub description: Option<String>,
+    pub command: Option<String>,
+    pub query: Option<String>,
+    pub text: Option<String>,
+    pub error: Option<String>,
+    pub raw: Value,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct OpenCodeTraceSnapshot {
+    pub bead_id: Option<String>,
+    pub workflow_key: String,
+    pub active_invocation_id: Option<String>,
+    pub model: Option<String>,
+    pub started_at: Option<String>,
+    pub updated_at: Option<String>,
+    pub finished_at: Option<String>,
+    pub status: String,
+    pub current_event: Option<OpenCodeTraceEvent>,
+    pub events: Vec<OpenCodeTraceEvent>,
+    pub tool_call_count: u64,
+    pub text_event_count: u64,
+    pub last_error: Option<String>,
+    pub summary: Option<Value>,
 }

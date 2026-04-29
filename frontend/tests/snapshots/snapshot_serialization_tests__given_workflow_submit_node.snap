@@ -1,0 +1,22 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&node"
+---
+{
+  "id": "00000000-0000-0000-0000-000000000036",
+  "name": "Workflow Submit",
+  "category": "flow",
+  "icon": "workflow",
+  "x": 90.0,
+  "y": 100.0,
+  "last_output": null,
+  "selected": false,
+  "executing": false,
+  "skipped": false,
+  "node_type": "workflow-submit",
+  "description": "Submit nested workflow",
+  "config": {
+    "type": "workflow-submit",
+    "workflow_name": "process-order"
+  }
+}

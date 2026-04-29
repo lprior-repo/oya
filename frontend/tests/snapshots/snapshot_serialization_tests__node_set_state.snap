@@ -1,0 +1,23 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&node"
+---
+{
+  "id": "00000000-0000-0000-0000-000000000007",
+  "name": "Save Cart",
+  "category": "state",
+  "icon": "save",
+  "x": 200.0,
+  "y": 400.0,
+  "last_output": null,
+  "selected": false,
+  "executing": false,
+  "skipped": false,
+  "node_type": "set-state",
+  "description": "Set state value",
+  "config": {
+    "key": "cart",
+    "type": "set-state",
+    "value": "{\"items\":[]}"
+  }
+}

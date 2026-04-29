@@ -5,6 +5,8 @@
 
 use clap::{Parser, Subcommand};
 
+use crate::lifecycle::types::{BeadId, GateId, RunId};
+
 const DEFAULT_BIND: &str = "127.0.0.1:9180";
 const DEFAULT_INGRESS: &str = "http://127.0.0.1:909";
 const DEFAULT_ADMIN: &str = "http://127.0.0.1:9070";
@@ -25,6 +27,11 @@ pub enum Command {
     Doctor(DoctorArgs),
     Serve(ServeArgs),
     Invoke(InvokeArgs),
+    Run(RunArgs),
+    Evidence(EvidenceArgs),
+    Verify(VerifyArgs),
+    Explain(ExplainArgs),
+    Report(ReportArgs),
     Implement(ImplementArgs),
     Lifecycle(LifecycleArgs),
     Status(StatusArgs),
@@ -71,8 +78,57 @@ pub struct InvokeArgs {
 }
 
 #[derive(Debug, clap::Args)]
+pub struct RunArgs {
+    #[arg(long, value_parser = parse_bead_id)]
+    pub bead_id: String,
+    #[arg(long, value_parser = parse_non_empty_text)]
+    pub prompt: String,
+    #[arg(long, default_value = DEFAULT_IMPL_MODEL, value_parser = parse_model_name)]
+    pub model: String,
+}
+
+#[derive(Debug, clap::Args)]
+pub struct EvidenceArgs {
+    #[command(subcommand)]
+    pub command: EvidenceCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum EvidenceCommand {
+    Check(EvidenceCheckArgs),
+}
+
+#[derive(Debug, clap::Args)]
+pub struct EvidenceCheckArgs {
+    #[arg(long, default_value = "run-demo", value_parser = parse_run_id)]
+    pub run_id: String,
+}
+
+#[derive(Debug, clap::Args)]
+pub struct VerifyArgs {
+    #[arg(long, value_parser = parse_bead_id)]
+    pub bead_id: String,
+    #[arg(long, default_value = "fmt", value_parser = parse_gate_id)]
+    pub gate: String,
+    #[arg(long)]
+    pub repair: bool,
+}
+
+#[derive(Debug, clap::Args)]
+pub struct ExplainArgs {
+    #[arg(long, value_parser = parse_finding_id)]
+    pub finding_id: String,
+}
+
+#[derive(Debug, clap::Args)]
+pub struct ReportArgs {
+    #[arg(long, value_parser = parse_report_run_id)]
+    pub run_id: String,
+}
+
+#[derive(Debug, clap::Args)]
 pub struct ImplementArgs {
-    #[arg(long, value_parser = parse_object_key)]
+    #[arg(long, value_parser = parse_bead_id)]
     pub bead: Option<String>,
     #[arg(long, default_value = DEFAULT_INGRESS, value_parser = parse_ingress_url)]
     pub ingress: String,
@@ -82,7 +138,7 @@ pub struct ImplementArgs {
 
 #[derive(Debug, clap::Args)]
 pub struct LifecycleArgs {
-    #[arg(long, value_parser = parse_object_key)]
+    #[arg(long, value_parser = parse_bead_id)]
     pub bead: Option<String>,
     #[arg(long, default_value = DEFAULT_INGRESS, value_parser = parse_ingress_url)]
     pub ingress: String,
@@ -93,9 +149,16 @@ pub struct LifecycleArgs {
 }
 
 #[derive(Debug, clap::Args)]
+#[command(group(
+    clap::ArgGroup::new("status_target")
+        .required(true)
+        .args(["key", "run_id"])
+))]
 pub struct StatusArgs {
     #[arg(long, value_parser = parse_object_key)]
-    pub key: String,
+    pub key: Option<String>,
+    #[arg(long, value_parser = parse_run_id)]
+    pub run_id: Option<String>,
     #[arg(long, default_value = DEFAULT_INGRESS, value_parser = parse_ingress_url)]
     pub ingress: String,
 }
@@ -183,6 +246,37 @@ pub fn parse_object_key(value: &str) -> Result<String, String> {
     Ok(trimmed.to_owned())
 }
 
+pub fn parse_bead_id(value: &str) -> Result<String, String> {
+    BeadId::parse(value)
+        .map(|bead_id| bead_id.as_str().to_owned())
+        .map_err(|error| format!("invalid bead id: {error}"))
+}
+
+pub fn parse_run_id(value: &str) -> Result<String, String> {
+    RunId::parse(value)
+        .map(|run_id| run_id.as_str().to_owned())
+        .map_err(|error| format!("invalid run id: {error}"))
+}
+
+pub fn parse_gate_id(value: &str) -> Result<String, String> {
+    GateId::parse(value)
+        .map(|gate_id| gate_id.as_str().to_owned())
+        .map_err(|error| format!("invalid gate id: {error}"))
+}
+
+pub fn parse_finding_id(value: &str) -> Result<String, String> {
+    parse_object_key(value).map_err(|error| format!("invalid finding id: {error}"))
+}
+
+pub fn parse_report_run_id(value: &str) -> Result<String, String> {
+    match RunId::parse(value) {
+        Ok(run_id) => Ok(run_id.as_str().to_owned()),
+        Err(_) => BeadId::parse(value)
+            .map(|bead_id| RunId::from_bead_id(&bead_id).as_str().to_owned())
+            .map_err(|error| format!("invalid report run id: {error}")),
+    }
+}
+
 pub fn parse_non_empty_text(value: &str) -> Result<String, String> {
     if value.trim().is_empty() {
         Err("value must not be empty".to_owned())
@@ -231,6 +325,15 @@ mod tests {
     }
 
     #[test]
+    fn parse_bead_id_uses_strict_lowercase_slug_rules() {
+        assert_eq!(parse_bead_id(" oya-8y3 "), Ok("oya-8y3".to_owned()));
+        assert!(parse_bead_id("bad/../id").is_err());
+        assert!(parse_bead_id("bad.id").is_err());
+        assert!(parse_bead_id("bad_id").is_err());
+        assert!(parse_bead_id("BAD-ID").is_err());
+    }
+
+    #[test]
     fn parse_non_empty_text_rejects_blank_values() {
         assert!(parse_non_empty_text("hello").is_ok());
         assert!(parse_non_empty_text(" ").is_err());
@@ -243,5 +346,160 @@ mod tests {
         assert!(parse_model_name("provider:model-v1").is_ok());
         assert!(parse_model_name(" ").is_err());
         assert!(parse_model_name("bad model").is_err());
+    }
+
+    #[test]
+    fn cli_parses_run_command_with_demo_bead_and_prompt() {
+        let parsed = Cli::try_parse_from(["oya", "run", "--bead-id", "demo", "--prompt", "noop"]);
+        let Ok(cli) = parsed else {
+            assert!(false, "run command should parse");
+            return;
+        };
+
+        match cli.command {
+            Command::Run(args) => {
+                assert_eq!(args.bead_id, "demo");
+                assert_eq!(args.prompt, "noop");
+                assert_eq!(args.model, DEFAULT_IMPL_MODEL);
+            }
+            _ => assert!(false, "expected run command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_run_command_with_explicit_model() {
+        let parsed = Cli::try_parse_from([
+            "oya",
+            "run",
+            "--bead-id",
+            "demo",
+            "--prompt",
+            "noop",
+            "--model",
+            "bad/model",
+        ]);
+        let Ok(cli) = parsed else {
+            assert!(false, "run command should parse explicit model");
+            return;
+        };
+
+        match cli.command {
+            Command::Run(args) => assert_eq!(args.model, "bad/model"),
+            _ => assert!(false, "expected run command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_status_command_by_run_id() {
+        let parsed = Cli::try_parse_from(["oya", "status", "--run-id", "run-demo"]);
+        let Ok(cli) = parsed else {
+            assert!(false, "status by run id should parse");
+            return;
+        };
+
+        match cli.command {
+            Command::Status(args) => {
+                assert_eq!(args.key, None);
+                assert_eq!(args.run_id, Some("run-demo".to_owned()));
+            }
+            _ => assert!(false, "expected status command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_evidence_check_with_default_run_id() {
+        let parsed = Cli::try_parse_from(["oya", "evidence", "check"]);
+        let Ok(cli) = parsed else {
+            assert!(false, "evidence check should parse");
+            return;
+        };
+
+        match cli.command {
+            Command::Evidence(args) => match args.command {
+                EvidenceCommand::Check(check) => assert_eq!(check.run_id, "run-demo"),
+            },
+            _ => assert!(false, "expected evidence command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_verify_command_with_demo_bead_and_fmt_gate() {
+        let parsed = Cli::try_parse_from(["oya", "verify", "--bead-id", "demo", "--gate", "fmt"]);
+        let Ok(cli) = parsed else {
+            assert!(false, "verify command should parse");
+            return;
+        };
+
+        match cli.command {
+            Command::Verify(args) => {
+                assert_eq!(args.bead_id, "demo");
+                assert_eq!(args.gate, "fmt");
+            }
+            _ => assert!(false, "expected verify command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_verify_command_with_default_fmt_gate() {
+        let parsed = Cli::try_parse_from(["oya", "verify", "--bead-id", "demo"]);
+        let Ok(cli) = parsed else {
+            assert!(false, "verify command should parse with default gate");
+            return;
+        };
+
+        match cli.command {
+            Command::Verify(args) => {
+                assert_eq!(args.bead_id, "demo");
+                assert_eq!(args.gate, "fmt");
+                assert!(!args.repair);
+            }
+            _ => assert!(false, "expected verify command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_verify_repair_command() {
+        let parsed = Cli::try_parse_from(["oya", "verify", "--bead-id", "demo", "--repair"]);
+        let Ok(cli) = parsed else {
+            assert!(false, "verify repair command should parse");
+            return;
+        };
+
+        match cli.command {
+            Command::Verify(args) => {
+                assert_eq!(args.bead_id, "demo");
+                assert_eq!(args.gate, "fmt");
+                assert!(args.repair);
+            }
+            _ => assert!(false, "expected verify command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_explain_command_with_demo_finding_id() {
+        let parsed = Cli::try_parse_from(["oya", "explain", "--finding-id", "demo"]);
+        let Ok(cli) = parsed else {
+            assert!(false, "explain command should parse");
+            return;
+        };
+
+        match cli.command {
+            Command::Explain(args) => assert_eq!(args.finding_id, "demo"),
+            _ => assert!(false, "expected explain command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_report_command_with_demo_alias() {
+        let parsed = Cli::try_parse_from(["oya", "report", "--run-id", "demo"]);
+        let Ok(cli) = parsed else {
+            assert!(false, "report command should parse demo alias");
+            return;
+        };
+
+        match cli.command {
+            Command::Report(args) => assert_eq!(args.run_id, "run-demo"),
+            _ => assert!(false, "expected report command"),
+        }
     }
 }

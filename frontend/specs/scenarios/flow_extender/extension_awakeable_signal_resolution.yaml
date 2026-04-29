@@ -1,0 +1,30 @@
+scenario:
+  id: ext-awakeable-signal-resolution
+  spec_ref: flow-wasm-v1
+  spec_version: 1.0.0
+  category: extension-behavior
+  visibility: open
+  priority: medium
+  description: Awakeable signals resolve through extension flow coordination.
+  rationale: Signal-driven extension updates should settle deterministically.
+setup:
+  universe: local
+  initial_state: awakeable-signal-pending
+  preconditions:
+    - description: Awaiting awakeable signal resolution.
+      check:
+        type: static
+        signal_pending: true
+steps:
+  - id: verify-awakeable-signal-resolution
+    description: Resolve awakeable signal in extension scenario.
+    action:
+      type: noop
+    assertions:
+      - type: status
+        expected: 0
+        message: Awakeable resolution scenario executes successfully.
+    extractions: []
+teardown:
+  reset_universe: true
+  custom_cleanup: []

@@ -1,0 +1,30 @@
+scenario:
+  id: ext-accept-apply
+  spec_ref: flow-wasm-v1
+  spec_version: 1.0.0
+  category: extension-behavior
+  visibility: open
+  priority: high
+  description: Applying a selected extension records acceptance path.
+  rationale: Accepted recommendations should flow through an explicit apply action.
+setup:
+  universe: local
+  initial_state: durable-without-timeout
+  preconditions:
+    - description: Timeout extension is suggested.
+      check:
+        type: static
+        suggestion_key: add-timeout-guard
+steps:
+  - id: apply-accepted
+    description: Apply selected extension.
+    action:
+      type: noop
+    assertions:
+      - type: status
+        expected: 0
+        message: Apply path remains executable.
+    extractions: []
+teardown:
+  reset_universe: true
+  custom_cleanup: []

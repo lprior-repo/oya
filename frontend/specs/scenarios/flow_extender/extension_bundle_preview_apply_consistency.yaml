@@ -1,0 +1,30 @@
+scenario:
+  id: ext-bundle-preview-apply-consistency
+  spec_ref: flow-wasm-v1
+  spec_version: 1.0.0
+  category: extension-behavior
+  visibility: open
+  priority: high
+  description: Bundle preview and apply paths stay consistent.
+  rationale: Previewed extension effects should align with apply behavior for trust.
+setup:
+  universe: local
+  initial_state: bundle-preview-generated
+  preconditions:
+    - description: Bundle preview exists for selected recommendations.
+      check:
+        type: static
+        preview_ready: true
+steps:
+  - id: verify-preview-apply-consistency
+    description: Confirm preview and apply outputs remain aligned.
+    action:
+      type: noop
+    assertions:
+      - type: status
+        expected: 0
+        message: Consistency scenario executes successfully in runner.
+    extractions: []
+teardown:
+  reset_universe: true
+  custom_cleanup: []

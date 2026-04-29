@@ -1,0 +1,24 @@
+/target
+.zjj/
+.moon/cache/
+.beads/
+.codanna/
+node_modules/
+playwright-report/
+test-results/
+.playwright/
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db
+mutants.out/
+
+# Fuzz build artifacts (large binary files)
+fuzz/target/
+
+# Generated artifacts and local recovery files
+/dist/
+*.rlib
+*.orig
+import.sql
+.jjignore.lock

@@ -1,0 +1,5 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&ExecutionState::Running"
+---
+"running"

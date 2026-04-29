@@ -1,0 +1,30 @@
+scenario:
+  id: ext-preview-hints
+  spec_ref: flow-wasm-v1
+  spec_version: 1.0.0
+  category: extension-behavior
+  visibility: open
+  priority: medium
+  description: Preview extension hints are available before apply.
+  rationale: Operators can inspect patch impact prior to mutating a workflow.
+setup:
+  universe: local
+  initial_state: empty-workflow
+  preconditions:
+    - description: Extension suggestion source is available.
+      check:
+        type: static
+        status: ready
+steps:
+  - id: preview-hints
+    description: Fetch extension preview metadata.
+    action:
+      type: noop
+    assertions:
+      - type: status
+        expected: 0
+        message: No-op scenario step should execute in runner.
+    extractions: []
+teardown:
+  reset_universe: true
+  custom_cleanup: []

@@ -1,0 +1,22 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&node"
+---
+{
+  "id": "00000000-0000-0000-0000-000000000038",
+  "name": "Service Call",
+  "category": "durable",
+  "icon": "call",
+  "x": 130.0,
+  "y": 140.0,
+  "last_output": null,
+  "selected": false,
+  "executing": false,
+  "skipped": false,
+  "node_type": "service-call",
+  "description": "Call Restate service",
+  "config": {
+    "service": "payment-service",
+    "type": "service-call"
+  }
+}

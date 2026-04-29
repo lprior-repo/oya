@@ -1,0 +1,22 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&node"
+---
+{
+  "id": "00000000-0000-0000-0000-000000000039",
+  "name": "Object Call",
+  "category": "durable",
+  "icon": "box",
+  "x": 150.0,
+  "y": 160.0,
+  "last_output": null,
+  "selected": false,
+  "executing": false,
+  "skipped": false,
+  "node_type": "object-call",
+  "description": "Call Restate object",
+  "config": {
+    "object_name": "order-object",
+    "type": "object-call"
+  }
+}

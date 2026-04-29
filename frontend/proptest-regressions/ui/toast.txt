@@ -1,0 +1,13 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 2a039f3adae5c6331c83419ee0523bd074de1f09ce37d6b871d22c97c82139b1 # shrinks to ms = 0
+cc da0d6141a38f45474f694375c7203cbf687321ddd34ea8fa158a19b67a3fdd93 # shrinks to ms = 1
+cc b971b45073c70374a08d6030b9e156c070a2bd95a441ed86c4fbccb1e4b1c964 # shrinks to offset_ms = 0
+cc 5a4484b80ec25d4e745c46d398691fec367e2510647933125736217ef09c3882 # shrinks to messages = ["A"]
+cc af1f8274948788ffa5b982b0857daa3fa05da3454584dfb35fdb08636e688431 # shrinks to ws = ""
+cc 28e3290bcc5bd00945b8fbff60c97046d030e8c109163126d1d70d5849167498 # shrinks to messages = ["a"]
+cc 64eb475ed5dfebecf6b1be35f1f9580c730b714ddcaddd38b33ae14ca577fe6e # shrinks to capacity = 1, messages = []

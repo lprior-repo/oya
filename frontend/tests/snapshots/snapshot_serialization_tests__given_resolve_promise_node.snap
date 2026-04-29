@@ -1,0 +1,22 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&node"
+---
+{
+  "id": "00000000-0000-0000-0000-000000000049",
+  "name": "Resolve Promise",
+  "category": "durable",
+  "icon": "check-circle",
+  "x": 470.0,
+  "y": 480.0,
+  "last_output": null,
+  "selected": false,
+  "executing": false,
+  "skipped": false,
+  "node_type": "resolve-promise",
+  "description": "Resolve promise",
+  "config": {
+    "promise_name": "await-approval",
+    "type": "resolve-promise"
+  }
+}

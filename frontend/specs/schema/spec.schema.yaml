@@ -1,0 +1,178 @@
+# Specification Schema v1.0
+# Canonical structure every spec must follow
+
+$schema: "http://json-schema.org/draft-07/schema#"
+title: "Autonomous Development Specification"
+description: "High-quality specification schema for AI-driven development"
+
+type: object
+required: [specification]
+properties:
+  specification:
+    type: object
+    required: [identity, intent, context, behaviors]
+    properties:
+      identity:
+        type: object
+        required: [id, version, status, author, created]
+        properties:
+          id:
+            type: string
+            pattern: "^spec-[a-z0-9-]+$"
+          version:
+            type: string
+            pattern: "^\\d+\\.\\d+\\.\\d+$"
+          status:
+            type: string
+            enum: [draft, review, approved, implemented, deprecated]
+          author:
+            type: string
+          created:
+            type: string
+            format: date-time
+          updated:
+            type: string
+            format: date-time
+          supersedes:
+            type: string
+
+      intent:
+        type: object
+        required: [problem_statement, success_criteria]
+        properties:
+          problem_statement:
+            type: string
+            minLength: 50
+          success_criteria:
+            type: array
+            items:
+              type: string
+            minItems: 1
+          non_goals:
+            type: array
+            items:
+              type: string
+
+      context:
+        type: object
+        required: [system_dependencies, invariants]
+        properties:
+          system_dependencies:
+            type: array
+            items:
+              type: object
+              required: [service, purpose, twin_available]
+              properties:
+                service:
+                  type: string
+                purpose:
+                  type: string
+                twin_available:
+                  type: boolean
+          existing_behaviors:
+            type: array
+            items:
+              type: string
+          constraints:
+            type: array
+            items:
+              type: string
+          invariants:
+            type: array
+            items:
+              type: string
+          glossary:
+            type: object
+            additionalProperties:
+              type: string
+
+      behaviors:
+        type: array
+        items:
+          type: object
+          required: [id, description, then]
+          properties:
+            id:
+              type: string
+            description:
+              type: string
+            given:
+              type: array
+              items:
+                type: string
+            when:
+              type: string
+            then:
+              type: array
+              items:
+                type: string
+            edge_cases:
+              type: array
+              items:
+                type: object
+                required: [id, when, then]
+                properties:
+                  id:
+                    type: string
+                  when:
+                    type: string
+                  then:
+                    type: array
+                    items:
+                      type: string
+
+      data_model:
+        type: object
+        properties:
+          entities:
+            type: array
+            items:
+              type: object
+              required: [name, fields]
+              properties:
+                name:
+                  type: string
+                fields:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      type:
+                        type: [string, object]
+                      description:
+                        type: string
+          state_transitions:
+            type: array
+            items:
+              type: object
+
+      api_contract:
+        type: object
+        properties:
+          endpoints:
+            type: array
+            items:
+              type: object
+          events_emitted:
+            type: array
+            items:
+              type: object
+          events_consumed:
+            type: array
+            items:
+              type: object
+
+      acceptance_criteria:
+        type: array
+        items:
+          type: object
+          required: [id, criterion]
+          properties:
+            id:
+              type: string
+            behavior_ref:
+              type: string
+            criterion:
+              type: string

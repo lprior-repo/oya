@@ -1,0 +1,23 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&original"
+---
+{
+  "id": "00000000-0000-0000-0000-000000000014",
+  "name": "Round Trip",
+  "category": "entry",
+  "icon": "globe",
+  "x": 42.0,
+  "y": 99.0,
+  "last_output": null,
+  "selected": false,
+  "executing": false,
+  "skipped": false,
+  "node_type": "http-handler",
+  "description": "HTTP request handler",
+  "config": {
+    "method": "GET",
+    "path": "/ping",
+    "type": "http-handler"
+  }
+}

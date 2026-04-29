@@ -1,0 +1,238 @@
+specification:
+  identity:
+    id: "spec-flow-wasm-v1"
+    version: "1.0.0"
+    status: "approved"
+    author: "opencode"
+    created: "2026-02-19T08:00:00Z"
+    updated: "2026-02-19T08:15:00Z"
+
+  intent:
+    problem_statement: >
+      Existing workflow automation tools (like n8n) are powerful but often rely on heavy backend
+      execution. There is a need for a client-side, zero-latency, private-by-default workflow
+      engine that runs entirely in the browser via WASM.
+    success_criteria:
+      - "Users can create a visual graph of nodes and connections"
+      - "Workflows execute entirely in the browser's WASM runtime"
+      - "Persistence is handled via LocalStorage digital twin"
+      - "Node-to-node data transfer produces correct results"
+    non_goals:
+      - "Server-side execution (not in MVP)"
+      - "Real-time collaboration (not in MVP)"
+      - "Complex branching logic (not in MVP)"
+
+  context:
+    system_dependencies:
+      - service: "local-storage"
+        purpose: "Store workflow definitions and node states"
+        twin_available: true
+      - service: "wasm-runtime"
+        purpose: "Execute workflow logic in isolated sandbox"
+        twin_available: false
+
+    existing_behaviors: []
+
+    constraints:
+      - "All execution must occur in browser (no network calls to execution engine)"
+      - "Workflow state must persist across page reloads"
+      - "Execution must handle cycles without infinite loops"
+      - "Memory usage must stay under 50MB for typical workflows"
+
+    invariants:
+      - "A connection must always have a valid source and target node"
+      - "Cycles are permitted but must be handled by the execution engine"
+      - "Node IDs must be unique within a workflow"
+      - "Connection IDs must be unique within a workflow"
+      - "Deleted nodes must have all connections removed"
+
+    glossary:
+      workflow: "A directed graph of nodes connected by edges"
+      node: "A single unit of computation in the workflow graph"
+      connection: "A directed edge from one node to another"
+      execution_context: "Runtime state passed between nodes during execution"
+
+  behaviors:
+    - id: "canvas-node-creation"
+      description: "User adds a node to the canvas"
+      given:
+        - "The node library is visible to the user"
+        - "The canvas is in edit mode"
+      when: "The user selects a node type (e.g., 'HTTP Request') from the library and drops it on the canvas"
+      then:
+        - "A new node entity is created with a unique UUID"
+        - "The node appears on the canvas at the drop coordinates"
+        - "Default configuration for that node type is initialized"
+        - "The node is persisted to localStorage"
+        - "Invariant check: Node IDs must be unique"
+      edge_cases:
+        - id: "duplicate-node-type-drop"
+          when: "User drops multiple nodes of the same type rapidly"
+          then:
+            - "Each drop creates a separate node with unique ID"
+            - "No state corruption occurs"
+        - id: "drop-outside-canvas"
+          when: "User drops node outside visible canvas area"
+          then:
+            - "Node is placed at the nearest valid canvas position"
+            - "Canvas scrolls to show the new node"
+
+    - id: "canvas-node-connection"
+      description: "User connects two nodes"
+      given:
+        - "At least two nodes exist on the canvas"
+        - "Canvas is in edit mode"
+      when: "User drags from node A's output port to node B's input port"
+      then:
+        - "A new connection entity is created with unique UUID"
+        - "Connection source is node A's output port"
+        - "Connection target is node B's input port"
+        - "Visual edge is drawn between nodes"
+        - "Connection is persisted to localStorage"
+        - "Invariant check: A connection must always have a valid source and target node"
+      edge_cases:
+        - id: "self-connection"
+          when: "User attempts to connect a node to itself"
+          then:
+            - "Connection is rejected"
+            - "Visual feedback shows invalid connection"
+            - "No connection entity is created"
+        - id: "duplicate-connection"
+          when: "User attempts to create a connection that already exists"
+          then:
+            - "Connection is rejected"
+            - "Existing connection remains unchanged"
+        - id: "reverse-connection"
+          when: "User connects node B to node A when connection A→B exists"
+          then:
+            - "New connection B→A is created (different from A→B)"
+
+    - id: "canvas-node-deletion"
+      description: "User deletes a node"
+      given:
+        - "At least one node exists on the canvas"
+      when: "User selects a node and presses Delete key (or clicks delete button)"
+      then:
+        - "Node entity is removed from state"
+        - "All connections involving this node are removed"
+        - "Removed connections are deleted from localStorage"
+        - "Node is removed from localStorage"
+        - "Invariant check: Deleted nodes must have all connections removed"
+      edge_cases:
+        - id: "delete-connected-node"
+          when: "User deletes a node that has connections"
+          then:
+            - "All connected edges are also deleted"
+            - "No orphaned connections remain in state"
+
+    - id: "workflow-execution"
+      description: "Execute the workflow graph"
+      given:
+        - "A graph with at least one trigger node"
+        - "At least one path from trigger to output"
+      when: "The 'Execute' button is clicked"
+      then:
+        - "Engine performs topological sort (or iterative firing for cycles)"
+        - "Nodes execute in correct order"
+        - "Each node receives data from previous nodes via execution context"
+        - "Visual pulse/highlight shows on currently executing node"
+        - "Final results are stored in the execution context"
+        - "Results are displayed in the output panel"
+      edge_cases:
+        - id: "empty-workflow"
+          when: "User clicks Execute with no nodes"
+          then:
+            - "Warning message is displayed"
+            - "No execution occurs"
+        - id: "no-trigger-node"
+          when: "Workflow has no trigger node"
+          then:
+            - "Warning: 'Workflow requires at least one trigger node'"
+            - "Execution does not proceed"
+        - id: "execution-timeout"
+          when: "Execution takes longer than 30 seconds"
+          then:
+            - "Execution is cancelled"
+            - "Error message displayed"
+            - "Partial results (if any) are preserved"
+        - id: "wasm-runtime-failure"
+          when: "WASM runtime fails to initialize or crashes during execution"
+          then:
+            - "User is notified of wasm-runtime failure"
+            - "Workflow state is preserved"
+            - "Execution engine is reset to idle state"
+
+    - id: "workflow-persistence"
+      description: "Workflow state persists across sessions"
+      given:
+        - "A workflow exists with nodes and connections"
+      when: "User reloads the page or closes and reopens the browser"
+      then:
+        - "All nodes are restored to their original positions"
+        - "All connections are restored"
+        - "Workflow is executable immediately"
+        - "Invariant check: Node IDs remain unique"
+      edge_cases:
+        - id: "corrupted-storage"
+          when: "localStorage contains invalid/malformed data"
+          then:
+            - "local-storage is reset due to error"
+            - "Warning displayed to user"
+            - "No crash occurs"
+        - id: "local-storage-quota-exceeded"
+          when: "Browser exceeds localStorage quota during save"
+          then:
+            - "User is notified of local-storage failure"
+            - "Workflow remains in memory for current session"
+            - "No data corruption occurs"
+
+  data_model:
+    entities:
+      - name: Node
+        fields:
+          - { name: id, type: string, description: "UUID v4" }
+          - { name: node_type, type: string, description: "e.g., 'trigger', 'http-request', 'transform'" }
+          - { name: position, type: object, properties: { x: number, y: number } }
+          - { name: data, type: object, description: "Node-specific configuration" }
+          - { name: created_at, type: string, format: "ISO8601" }
+      - name: Connection
+        fields:
+          - { name: id, type: string, description: "UUID v4" }
+          - { name: source_node, type: string, description: "UUID of source node" }
+          - { name: target_node, type: string, description: "UUID of target node" }
+          - { name: source_port, type: string, description: "Output port name" }
+          - { name: target_port, type: string, description: "Input port name" }
+    state_transitions:
+      - name: "node-creation"
+        from: "none"
+        to: "node-exists"
+        invariant_ref: "Node IDs must be unique within a workflow"
+
+  acceptance_criteria:
+    - id: ac-01
+      behavior_ref: canvas-node-creation
+      criterion: "Nodes can be dragged without state corruption"
+    - id: ac-02
+      behavior_ref: canvas-node-connection
+      criterion: "Connecting node A to node B creates an observable edge"
+    - id: ac-03
+      behavior_ref: workflow-execution
+      criterion: "WASM engine processes JSON data between nodes correctly"
+    - id: ac-04
+      behavior_ref: canvas-node-deletion
+      criterion: "Deleting a node removes all its connections"
+    - id: ac-05
+      behavior_ref: workflow-persistence.corrupted-storage
+      criterion: "Reloading page with corrupted storage resets safely"
+    - id: ac-06
+      behavior_ref: workflow-execution.empty-workflow
+      criterion: "Executing empty workflow shows warning without crashing"
+    - id: ac-07
+      behavior_ref: canvas-node-connection.self-connection
+      criterion: "Self-connection is rejected with visual feedback"
+    - id: ac-08
+      behavior_ref: workflow-persistence.local-storage-quota-exceeded
+      criterion: "Storage failure is communicated without data loss"
+    - id: ac-09
+      behavior_ref: workflow-execution.wasm-runtime-failure
+      criterion: "WASM runtime crashes are handled gracefully without data loss"

@@ -1,0 +1,36 @@
+--- src/ui/config_panel.rs
++++ src/ui/config_panel.rs
+@@ -62,11 +62,11 @@
+ fn ConfigTab(node: Node, on_change: EventHandler<Value>) -> Element {
+     let config = node.config.clone();
+ 
+     // Helper for updating string values cleanly
+-    let update_str = {
++    let update_str = EventHandler::new({
+         let config = config.clone();
+-        move |key: String, val: String| {
++        move |(key, val): (String, String)| {
+             let mut new_config = config.clone();
+             if let Some(obj) = new_config.as_object_mut() {
+                 obj.insert(key, Value::String(val));
+                 on_change.call(new_config);
+             }
+         }
+-    };
++    });
+ 
+-    let update_u64 = {
++    let update_u64 = EventHandler::new({
+         let config = config.clone();
+-        move |key: String, val: u64| {
++        move |(key, val): (String, u64)| {
+             let mut new_config = config.clone();
+             if let Some(obj) = new_config.as_object_mut() {
+                 obj.insert(key, Value::Number(val.into()));
+                 on_change.call(new_config);
+             }
+         }
+-    };
++    });
+ 
+     let input_cls = "h-8 w-full rounded-md border border-slate-700 bg-slate-950 px-3 font-mono text-[12px] text-slate-100 outline-none transition-colors focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/30";

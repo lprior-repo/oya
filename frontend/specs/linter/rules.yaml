@@ -1,0 +1,97 @@
+# Spec Linter Rules
+# Validates spec quality before agent starts development
+
+rules:
+  # COMPLETENESS RULES
+
+  - id: SPEC-001
+    name: every-dependency-has-error-handling
+    severity: error
+    description: >
+      Every external service in context.system_dependencies must have
+      at least one edge_case in behaviors that handles that service failing.
+    banned_phrases: []
+
+  - id: SPEC-002
+    name: every-state-transition-has-invariant-check
+    severity: error
+    description: >
+      Every state transition must reference at least one invariant
+      that holds after the transition.
+
+  - id: SPEC-003
+    name: every-endpoint-specifies-auth
+    severity: error
+    description: >
+      Every API endpoint must explicitly specify its authentication
+      requirement (even if "none").
+
+  - id: SPEC-004
+    name: every-behavior-has-acceptance-criterion
+    severity: warning
+    description: >
+      Every behavior (including edge cases) should have at least one
+      acceptance criterion that validates it.
+
+  # CLARITY RULES
+
+  - id: SPEC-010
+    name: no-ambiguous-language
+    severity: warning
+    description: >
+      Spec text should not contain ambiguous phrases that leave
+      decisions to the implementer.
+    banned_phrases:
+      - "as appropriate"
+      - "if needed"
+      - "as necessary"
+      - "etc."
+      - "and so on"
+      - "obviously"
+      - "simply"
+      - "just"
+      - "should probably"
+      - "might want to"
+      - "use your judgment"
+      - "common sense"
+      - "standard practice"
+      - "the usual way"
+
+  - id: SPEC-011
+    name: concrete-error-responses
+    severity: error
+    description: >
+      Error responses must specify exact HTTP status codes and
+      response body structure, not just "return an error".
+
+  # SECURITY RULES
+
+  - id: SPEC-020
+    name: enumeration-prevention
+    severity: error
+    description: >
+      Endpoints that accept user identifiers must specify identical
+      responses for existing and non-existing users.
+
+  - id: SPEC-021
+    name: rate-limiting-specified
+    severity: warning
+    description: >
+      Write endpoints should specify rate limiting behavior.
+
+  # TESTABILITY RULES
+
+  - id: SPEC-030
+    name: behaviors-are-observable
+    severity: error
+    description: >
+      Every 'then' clause must describe an externally observable outcome,
+      not an internal implementation detail.
+
+  # SPECIFIC RULES FOR FLOW-WASM
+
+  - id: SPEC-040
+    name: canvas-behavior-requires-visual-feedback
+    severity: warning
+    description: >
+      Canvas behaviors should specify visual feedback for user experience.

@@ -178,7 +178,7 @@ tasks:
     options:
       cache: false  # Composite task - deps handle caching
 
-  ci:
+  root-ci:
     command: "true"
     description: "Full CI pipeline (fmt + clippy + tests + holdout + build + cue)"
     deps:

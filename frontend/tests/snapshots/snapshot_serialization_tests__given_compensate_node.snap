@@ -1,0 +1,22 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&node"
+---
+{
+  "id": "00000000-0000-0000-0000-000000000044",
+  "name": "Compensate",
+  "category": "flow",
+  "icon": "undo",
+  "x": 370.0,
+  "y": 380.0,
+  "last_output": null,
+  "selected": false,
+  "executing": false,
+  "skipped": false,
+  "node_type": "compensate",
+  "description": "Compensating transaction",
+  "config": {
+    "target_step": "charge-card",
+    "type": "compensate"
+  }
+}

@@ -1,0 +1,22 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&node"
+---
+{
+  "id": "00000000-0000-0000-0000-000000000033",
+  "name": "HTTP Call",
+  "category": "durable",
+  "icon": "call",
+  "x": 30.0,
+  "y": 40.0,
+  "last_output": null,
+  "selected": false,
+  "executing": false,
+  "skipped": false,
+  "node_type": "http-call",
+  "description": "Call external HTTP API",
+  "config": {
+    "type": "http-call",
+    "url": "https://api.example.com/v1/data"
+  }
+}

@@ -1,0 +1,22 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&node"
+---
+{
+  "id": "00000000-0000-0000-0000-000000000005",
+  "name": "Check Stock",
+  "category": "flow",
+  "icon": "git-branch",
+  "x": 500.0,
+  "y": 150.0,
+  "last_output": null,
+  "selected": false,
+  "executing": false,
+  "skipped": false,
+  "node_type": "condition",
+  "description": "Conditional branch",
+  "config": {
+    "expression": "$.stock > 0",
+    "type": "condition"
+  }
+}

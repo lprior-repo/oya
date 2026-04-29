@@ -23,7 +23,9 @@
 
 mod persist;
 
-use crate::lifecycle::types::BeadId;
+use crate::lifecycle::types::{
+    BeadId, EvidenceEnvelope, EvidenceEnvelopeError, EvidenceRecordId, RunId,
+};
 use fjall::{Database, Keyspace, KeyspaceCreateOptions, PersistMode};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -34,6 +36,7 @@ const KEYSPACE_WORKFLOWS: &str = "workflows";
 const KEYSPACE_JOURNAL: &str = "journal";
 const KEYSPACE_MEMORY: &str = "memory";
 const KEYSPACE_STATUS: &str = "status";
+const KEYSPACE_EVIDENCE: &str = "evidence";
 
 /// Errors that can occur while interacting with the evidence store.
 #[derive(Debug, Error)]
@@ -42,6 +45,12 @@ pub enum StateDbError {
     Fjall(#[from] fjall::Error),
     #[error("serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
+    #[error("evidence envelope error: {0}")]
+    EvidenceEnvelope(#[from] EvidenceEnvelopeError),
+    #[error("duplicate evidence record: {0}")]
+    DuplicateEvidenceRecord(String),
+    #[error("invalid utf-8 evidence record: {0}")]
+    InvalidEvidenceUtf8(String),
     /// Returned when a lifecycle state has no bead ID (e.g. default/empty phase).
     #[error("state has no bead ID")]
     NoBeadId,
@@ -60,6 +69,7 @@ pub struct StateDb {
     journal: Keyspace,
     memory: Keyspace,
     status: Keyspace,
+    evidence: Keyspace,
 }
 
 impl StateDb {
@@ -81,7 +91,10 @@ impl StateDb {
         let status = db
             .keyspace(KEYSPACE_STATUS, || KeyspaceCreateOptions::default())
             .map_err(StateDbError::Fjall)?;
-        Ok(Self { db: Arc::new(db), workflows, journal, memory, status })
+        let evidence = db
+            .keyspace(KEYSPACE_EVIDENCE, || KeyspaceCreateOptions::default())
+            .map_err(StateDbError::Fjall)?;
+        Ok(Self { db: Arc::new(db), workflows, journal, memory, status, evidence })
     }
 
     /// Persists a single workflow state JSON for a bead.
@@ -155,6 +168,54 @@ impl StateDb {
             .map(|opt| opt.and_then(|v| String::from_utf8(v.to_vec()).ok()))
     }
 
+    /// Appends a canonical evidence envelope for a run.
+    pub fn append_evidence(&self, envelope: &EvidenceEnvelope) -> Result<()> {
+        let key = evidence_key(envelope);
+        if self.evidence.get(key.as_str())?.is_some() {
+            return Err(StateDbError::DuplicateEvidenceRecord(key));
+        }
+        let json = envelope.to_canonical_json()?;
+        self.evidence.insert(key.as_str(), json.as_str())?;
+        Ok(())
+    }
+
+    /// Loads all canonical evidence envelopes for a run, ordered by key.
+    pub fn load_evidence(&self, run_id: &RunId) -> Result<Vec<EvidenceEnvelope>> {
+        let prefix = evidence_prefix(run_id);
+        self.evidence
+            .prefix(&prefix)
+            .map(|guard| {
+                let value = guard.value()?;
+                let json = String::from_utf8(value.to_vec())
+                    .map_err(|error| StateDbError::InvalidEvidenceUtf8(error.to_string()))?;
+                EvidenceEnvelope::from_canonical_json(&json).map_err(StateDbError::from)
+            })
+            .collect()
+    }
+
+    /// Finds one canonical evidence envelope by record id.
+    pub fn find_evidence_record(
+        &self,
+        record_id: &EvidenceRecordId,
+    ) -> Result<Option<EvidenceEnvelope>> {
+        self.evidence
+            .iter()
+            .map(|guard| {
+                let value = guard.value()?;
+                let json = String::from_utf8(value.to_vec())
+                    .map_err(|error| StateDbError::InvalidEvidenceUtf8(error.to_string()))?;
+                EvidenceEnvelope::from_canonical_json(&json).map_err(StateDbError::from)
+            })
+            .find_map(|result| match result {
+                Ok(envelope) if envelope.record_id.as_str() == record_id.as_str() => {
+                    Some(Ok(envelope))
+                }
+                Ok(_) => None,
+                Err(error) => Some(Err(error)),
+            })
+            .transpose()
+    }
+
     /// Deletes all state and journal for a bead.
     #[allow(dead_code)]
     pub fn delete_workflow(&self, bead_id: &BeadId) -> Result<()> {
@@ -216,6 +277,19 @@ fn next_journal_key(bead_id: &BeadId) -> String {
     format!("{}_{ts:020}_{seq:010}", bead_id.as_str())
 }
 
+fn evidence_prefix(run_id: &RunId) -> String {
+    format!("{}_", run_id.as_str())
+}
+
+fn evidence_key(envelope: &EvidenceEnvelope) -> String {
+    format!(
+        "{}_{:020}_{}",
+        envelope.run_id.as_str(),
+        envelope.timestamp.timestamp_millis(),
+        envelope.record_id.as_str()
+    )
+}
+
 // ─── Re-exports ───────────────────────────────────────────────────────────────
 
 /// Persists lifecycle state and journal atomically, then flushes.
@@ -232,7 +306,11 @@ pub use persist::load_state;
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use crate::lifecycle::types::{BeadData, LifecycleState, Phase};
+    use crate::lifecycle::types::{
+        BeadData, EvidenceEnvelopeParts, EvidenceKind, EvidenceMetadata, EvidenceRecordId,
+        LifecycleState, Phase,
+    };
+    use chrono::{TimeZone, Utc};
 
     #[test]
     fn timestamp_now_returns_real_value() {
@@ -278,5 +356,65 @@ mod tests {
         let db2 = StateDb::open(dir.path().join("db")).unwrap();
         let loaded = db2.load_workflow(&bead_id).unwrap();
         assert!(loaded.is_some(), "flush must persist data so it survives DB close/reopen");
+    }
+
+    #[test]
+    fn evidence_fjall_writes_and_reloads_records_in_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("db");
+        let db = StateDb::open(&db_path).unwrap();
+        let first = evidence_envelope("ev-oya-3uu-001", 0, EvidenceKind::RunStarted, None);
+        let second = evidence_envelope(
+            "ev-oya-3uu-002",
+            1,
+            EvidenceKind::PromptRecord,
+            Some(first.checksum.clone()),
+        );
+
+        db.append_evidence(&first).unwrap();
+        db.append_evidence(&second).unwrap();
+        db.flush().unwrap();
+        drop(db);
+
+        let reloaded = StateDb::open(&db_path).unwrap().load_evidence(&run_id()).unwrap();
+        assert_eq!(reloaded, vec![first, second]);
+    }
+
+    #[test]
+    fn evidence_fjall_rejects_duplicate_record_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = StateDb::open(dir.path().join("db")).unwrap();
+        let envelope = evidence_envelope("ev-oya-3uu-dup", 0, EvidenceKind::RunStarted, None);
+
+        db.append_evidence(&envelope).unwrap();
+        let duplicate = db.append_evidence(&envelope);
+
+        assert!(matches!(duplicate, Err(StateDbError::DuplicateEvidenceRecord(_))));
+    }
+
+    fn evidence_envelope(
+        record_id: &str,
+        offset_seconds: i64,
+        kind: EvidenceKind,
+        previous_checksum: Option<crate::lifecycle::types::EvidenceChecksum>,
+    ) -> EvidenceEnvelope {
+        EvidenceEnvelope::new(EvidenceEnvelopeParts {
+            record_id: EvidenceRecordId::parse(record_id).unwrap(),
+            run_id: run_id(),
+            bead_id: bead_id(),
+            timestamp: Utc.timestamp_opt(1_779_999_600 + offset_seconds, 0).unwrap(),
+            kind,
+            metadata: EvidenceMetadata::new(),
+            previous_checksum,
+        })
+        .unwrap()
+    }
+
+    fn run_id() -> RunId {
+        RunId::from_bead_id(&bead_id())
+    }
+
+    fn bead_id() -> BeadId {
+        BeadId::parse("oya-3uu").unwrap()
     }
 }

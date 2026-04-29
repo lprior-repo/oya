@@ -22,7 +22,7 @@ This is the "conservative, correct side" of AI development: deterministic workfl
 
 ### Language and Stack
 - **Rust only**, written in a purely functional style (see `FUNCTIONAL_RUST.md`)
-- Structured mono‑repo with workspaces (JJ workspaces, moon‑style monorepo management)
+- Structured mono-repo with Git branch/worktree isolation and moon-style monorepo management
 - CI/CD with a merge queue as the final arbiter for main
 - Full‑stack Rust: Axum/Actix backends, CLI tools, and Dioxus/WASM frontends
 
@@ -33,7 +33,7 @@ This is the "conservative, correct side" of AI development: deterministic workfl
 | **OYA/Restate** | Orchestration runtime—decides stage transitions, retries, terminal outcomes |
 | **OpenCode Adapter** | Subprocess execution per stage, returns structured output only |
 | **Moon** | CI/CD wrapper—executes validation gates, emits pass/fail evidence |
-| **jj** | Workspace isolation and merge-flow primitive |
+| **Git/GitHub** | Branch/worktree isolation and PR merge-flow primitive |
 | **Beads (br)** | Intake and lifecycle source of truth for all work items |
 | **Codanna MCP** | Code discovery (symbols, callers, calls, impact, dependency tracing) |
 | **Sled** | Persistence baseline for run and evidence state |
@@ -453,14 +453,14 @@ br close <id> --reason "..."       # Close with reason
 br sync --flush-only               # Export to JSONL
 ```
 
-### jj (Workspace Isolation)
+### Git (Workspace Isolation)
 
 ```bash
-jj workspace add <workspace>       # Create workspace
-jj git fetch                       # Sync remote refs
-jj rebase                          # Rebase onto latest main
-jj bookmark create <name>          # Create bookmark for landing
-jj workspace forget <workspace>    # Cleanup workspace
+git switch -c <branch>             # Create an isolated branch
+git worktree add <path> <branch>   # Optional physical isolation
+git fetch origin                   # Sync remote refs
+git rebase origin/main             # Rebase onto latest main
+git push -u origin HEAD:<branch>   # Publish for PR landing
 ```
 
 ### Codanna (Code Discovery)
@@ -481,8 +481,8 @@ codanna_analyze_impact             # Full dependency graph
 # 1. Find work
 br ready
 
-# 2. Create workspace
-jj workspace add <workspace>
+# 2. Create isolated branch/worktree when needed
+git switch -c <branch>
 
 # 3. Claim work
 br update <id> --status in_progress
@@ -494,9 +494,9 @@ oya run --bead <id>
 moon run :ci
 
 # 6. Complete
-jj git fetch
-jj rebase
-jj bookmark create <name>
+git fetch origin
+git rebase origin/main
+git push -u origin HEAD:<branch>
 br close <id>
 br sync --flush-only
 ```
@@ -508,8 +508,8 @@ br sync --flush-only
 Before any change lands:
 
 1. `moon run :ci` passes
-2. `jj git fetch && jj rebase` completes
-3. `jj bookmark create <name>` prepared for merge
+2. `git fetch origin && git rebase origin/main` completes
+3. Git branch is pushed and ready for PR review
 4. `br close <id>` closes the bead
 5. `br sync --flush-only` exports state
 6. `git add .beads/` and commit
@@ -519,7 +519,7 @@ Before any change lands:
 ## Non-Goals (Current)
 
 - UI/frontend productization beyond the planner companion
-- Replacing or removing jj
+- Replacing Git/GitHub as the active branch and PR flow
 - Speculative multi-framework support
 - UX polish ahead of governance correctness
 - "Rewrite whole apps" as a single action (emergent property of many safe runs, not a single action)

@@ -304,7 +304,7 @@ For the OYA project specifically:
 
 1. **Task operations** return `Vector<Effect>` describing file changes, git operations, etc.
 2. **Stage execution** is pure - returns effects for tool execution
-3. **Workspace isolation** commands are effects to be interpreted by jj shell
+3. **Workspace isolation** commands are Git branch/worktree effects interpreted at the shell boundary only when physical isolation is required
 4. **Pipeline stages** compose via `.pipe()` chains
 
 Example:
@@ -320,8 +320,8 @@ pub fn execute_stage(task: Task, stage: Stage) -> Result<Vector<Effect>, StageEr
 
 fn prepare_workspace(task: Task, stage: &Stage) -> (Task, Vector<Effect>) {
     let effects = Vector::from(vec![
-        Effect::JjCommand {
-            cmd: format!("jj workspace add {}", task.slug)
+        Effect::GitCommand {
+            cmd: format!("git switch -c {}", task.slug)
         },
         Effect::Log {
             msg: format!("Workspace ready for {}", stage.name)

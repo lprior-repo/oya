@@ -1,0 +1,22 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&node"
+---
+{
+  "id": "00000000-0000-0000-0000-000000000034",
+  "name": "Kafka Handler",
+  "category": "entry",
+  "icon": "kafka",
+  "x": 50.0,
+  "y": 60.0,
+  "last_output": null,
+  "selected": false,
+  "executing": false,
+  "skipped": false,
+  "node_type": "kafka-handler",
+  "description": "Kafka message handler",
+  "config": {
+    "topic": "orders.created",
+    "type": "kafka-handler"
+  }
+}

@@ -1,0 +1,22 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&node"
+---
+{
+  "id": "00000000-0000-0000-0000-000000000035",
+  "name": "Cron Trigger",
+  "category": "entry",
+  "icon": "clock",
+  "x": 70.0,
+  "y": 80.0,
+  "last_output": null,
+  "selected": false,
+  "executing": false,
+  "skipped": false,
+  "node_type": "cron-trigger",
+  "description": "Scheduled cron trigger",
+  "config": {
+    "schedule": "0 */5 * * *",
+    "type": "cron-trigger"
+  }
+}

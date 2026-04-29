@@ -1,0 +1,23 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&node"
+---
+{
+  "id": "00000000-0000-0000-0000-00000000003c",
+  "name": "Delayed Send",
+  "category": "durable",
+  "icon": "clock-send",
+  "x": 210.0,
+  "y": 220.0,
+  "last_output": null,
+  "selected": false,
+  "executing": false,
+  "skipped": false,
+  "node_type": "delayed-send",
+  "description": "Send delayed message",
+  "config": {
+    "delay_ms": 30000,
+    "target": "reminder-queue",
+    "type": "delayed-send"
+  }
+}

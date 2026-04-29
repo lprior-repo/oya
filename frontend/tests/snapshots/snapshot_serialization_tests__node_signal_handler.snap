@@ -1,0 +1,22 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&node"
+---
+{
+  "id": "00000000-0000-0000-0000-00000000000a",
+  "name": "On Cancel",
+  "category": "signal",
+  "icon": "bell",
+  "x": 100.0,
+  "y": 500.0,
+  "last_output": null,
+  "selected": false,
+  "executing": false,
+  "skipped": false,
+  "node_type": "signal-handler",
+  "description": "Signal handler",
+  "config": {
+    "signal_name": "order-cancelled",
+    "type": "signal-handler"
+  }
+}

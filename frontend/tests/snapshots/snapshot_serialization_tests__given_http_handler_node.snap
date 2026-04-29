@@ -1,0 +1,23 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&node"
+---
+{
+  "id": "00000000-0000-0000-0000-000000000032",
+  "name": "HTTP Handler",
+  "category": "entry",
+  "icon": "globe",
+  "x": 10.0,
+  "y": 20.0,
+  "last_output": null,
+  "selected": false,
+  "executing": false,
+  "skipped": false,
+  "node_type": "http-handler",
+  "description": "HTTP request handler",
+  "config": {
+    "method": "GET",
+    "path": "/api/ping",
+    "type": "http-handler"
+  }
+}

@@ -1,0 +1,22 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&node"
+---
+{
+  "id": "00000000-0000-0000-0000-000000000045",
+  "name": "Sleep",
+  "category": "timing",
+  "icon": "timer",
+  "x": 390.0,
+  "y": 400.0,
+  "last_output": null,
+  "selected": false,
+  "executing": false,
+  "skipped": false,
+  "node_type": "sleep",
+  "description": "Wait for duration",
+  "config": {
+    "duration_ms": 10000,
+    "type": "sleep"
+  }
+}

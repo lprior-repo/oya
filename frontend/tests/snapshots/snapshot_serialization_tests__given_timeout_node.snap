@@ -1,0 +1,22 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&node"
+---
+{
+  "id": "00000000-0000-0000-0000-000000000046",
+  "name": "Timeout",
+  "category": "timing",
+  "icon": "timer",
+  "x": 410.0,
+  "y": 420.0,
+  "last_output": null,
+  "selected": false,
+  "executing": false,
+  "skipped": false,
+  "node_type": "timeout",
+  "description": "Operation timeout",
+  "config": {
+    "timeout_ms": 5000,
+    "type": "timeout"
+  }
+}

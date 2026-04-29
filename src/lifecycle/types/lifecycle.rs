@@ -50,14 +50,6 @@ pub struct LifecycleState {
     pub phase: Phase,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CompensationDiagnostic {
-    pub compensation_type: String,
-    pub target: String,
-    pub success: bool,
-    pub error: Option<String>,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum CancelState {
     #[default]

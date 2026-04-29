@@ -1,0 +1,22 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&node"
+---
+{
+  "id": "00000000-0000-0000-0000-000000000043",
+  "name": "Parallel",
+  "category": "flow",
+  "icon": "layers",
+  "x": 350.0,
+  "y": 360.0,
+  "last_output": null,
+  "selected": false,
+  "executing": false,
+  "skipped": false,
+  "node_type": "parallel",
+  "description": "Execute in parallel",
+  "config": {
+    "branches": 3,
+    "type": "parallel"
+  }
+}

@@ -11,7 +11,7 @@ This repo runs Oya with Docker Restate and fixed local ports:
 ## Prerequisites
 
 - `docker` + `docker compose`
-- `restate` CLI
+- `restate` CLI (optional; Oya falls back to Restate Admin API for registration and validation)
 - `gh` CLI authenticated
 - `oya` binary available on host
 
@@ -25,7 +25,7 @@ oya init
 
 1. Disables/stops user-systemd Restate services.
 2. Recreates Docker Restate from `docker-compose.yml` with fresh state.
-3. Restarts `oya.service` on `:9180`.
+3. Restarts `oya.service` on `:9180`, or starts a local `oya serve` fallback when no user service is installed.
 4. Waits for health/discovery checks.
 5. Registers Oya handlers with Restate.
 6. Verifies `Oya`, `OyaMemory`, `OyaService` are present.
@@ -58,7 +58,7 @@ Repo selection:
 - If omitted, Oya auto-detects from:
 
 ```bash
-gh repo view --json nameWithOwner
+git remote get-url origin
 ```
 
 Status/cancel:

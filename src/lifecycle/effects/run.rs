@@ -25,6 +25,13 @@ enum MoonTask {
     QuickLegacy,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpencodeOutputErrorKind {
+    ErrorEvent,
+    InvalidModel,
+    AuthFailure,
+}
+
 impl MoonTask {
     fn as_arg(self) -> &'static str {
         match self {
@@ -50,7 +57,7 @@ pub async fn run_effect(
     effect: Effect,
 ) -> Result<EffectJournalEntry, LifecycleError> {
     if let Effect::WorkspacePrepare { workspace, path } = effect.clone() {
-        return prepare_workspace(executor, workspace, path).await;
+        return prepare_workspace(workspace, path);
     }
     if let Effect::MoonCi { cwd } = effect.clone() {
         return run_moon_ci_effect(executor, effect, cwd).await;
@@ -132,9 +139,7 @@ pub async fn run_compensation(
     compensation: Compensation,
 ) -> anyhow::Result<EffectJournalEntry> {
     match compensation {
-        Compensation::ForgetWorkspace { workspace } => {
-            run_forget_workspace_compensation(executor, workspace).await
-        }
+        Compensation::ForgetWorkspace { workspace } => run_forget_workspace_compensation(workspace),
         Compensation::MarkBeadBlocked { bead, reason } => {
             let effect = Effect::Br {
                 args: vec![
@@ -152,38 +157,20 @@ pub async fn run_compensation(
     }
 }
 
-async fn run_forget_workspace_compensation(
-    executor: &dyn CommandExecutor,
+fn run_forget_workspace_compensation(
     workspace: WorkspaceName,
 ) -> anyhow::Result<EffectJournalEntry> {
     let timeout_secs = DEFAULT_CLI_TIMEOUT_SECS;
-    let timeout = Duration::from_secs(timeout_secs);
-    let args = vec!["workspace".to_owned(), "forget".to_owned(), workspace.as_str().to_owned()];
-    let jj_result = executor.run("jj", &args, timeout, None).await;
     let workspace_path = workspace.workspace_path();
-    let dir_result = remove_workspace_dir(&workspace_path);
-    match (jj_result, dir_result) {
-        (Ok(jj_output), Ok(_)) => Ok(EffectJournalEntry {
-            effect: Effect::Jj { args, cwd: None },
-            timeout_secs,
-            success: true,
-            stdout: jj_output.stdout,
-            stderr: jj_output.stderr,
-        }),
-        (Err(jj_err), Err(dir_err)) => {
-            let error_msg =
-                format!("jj forget failed: {jj_err}, directory removal failed: {dir_err}");
-            Err(anyhow::anyhow!(error_msg))
-        }
-        (Err(jj_err), Ok(_)) => {
-            let error_msg = format!("jj forget failed: {jj_err}");
-            Err(anyhow::anyhow!(error_msg))
-        }
-        (Ok(_), Err(dir_err)) => {
-            let error_msg = format!("directory removal failed: {dir_err}");
-            Err(anyhow::anyhow!(error_msg))
-        }
-    }
+    let stdout = remove_workspace_dir(&workspace_path)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    Ok(EffectJournalEntry {
+        effect: Effect::WorkspacePrepare { workspace, path: workspace_path },
+        timeout_secs,
+        success: true,
+        stdout,
+        stderr: String::new(),
+    })
 }
 
 fn effect_command(effect: &Effect) -> (&'static str, Vec<String>, Option<String>) {
@@ -219,9 +206,52 @@ fn status_ok(status_code: Option<i32>) -> bool {
 /// Used for both command failure classification and error message sanitization.
 #[must_use]
 pub fn opencode_output_is_error(stdout: &str, stderr: &str) -> bool {
-    stdout.contains("\"type\":\"error\"")
-        || stderr.contains("ProviderModelNotFoundError")
-        || stderr.contains("Model not found")
+    opencode_output_error_kind(stdout, stderr).is_some()
+}
+
+#[must_use]
+pub fn opencode_output_error_kind(stdout: &str, stderr: &str) -> Option<OpencodeOutputErrorKind> {
+    [stdout, stderr].into_iter().find_map(classify_opencode_error_text)
+}
+
+fn classify_opencode_error_text(text: &str) -> Option<OpencodeOutputErrorKind> {
+    let normalized = text.to_ascii_lowercase();
+    if contains_invalid_model_error(&normalized) {
+        Some(OpencodeOutputErrorKind::InvalidModel)
+    } else if contains_auth_error(&normalized) {
+        Some(OpencodeOutputErrorKind::AuthFailure)
+    } else if contains_opencode_error_event(text) {
+        Some(OpencodeOutputErrorKind::ErrorEvent)
+    } else {
+        None
+    }
+}
+
+fn contains_invalid_model_error(normalized: &str) -> bool {
+    ["providermodelnotfounderror", "model not found", "invalid model"]
+        .into_iter()
+        .any(|needle| normalized.contains(needle))
+}
+
+fn contains_auth_error(normalized: &str) -> bool {
+    ["unauthorized", "forbidden", "authentication", "invalid password"]
+        .into_iter()
+        .any(|needle| normalized.contains(needle))
+}
+
+fn contains_opencode_error_event(text: &str) -> bool {
+    let compact = text.chars().filter(|char| !char.is_ascii_whitespace()).collect::<String>();
+    compact.contains("\"type\":\"error\"") || text.lines().any(line_is_opencode_error_event)
+}
+
+fn line_is_opencode_error_event(line: &str) -> bool {
+    match serde_json::from_str::<serde_json::Value>(line) {
+        Ok(value) => value
+            .get("type")
+            .and_then(|kind| kind.as_str())
+            .is_some_and(|kind| kind.eq_ignore_ascii_case("error")),
+        Err(_) => false,
+    }
 }
 
 fn existing_pr_url_from_non_zero(effect: &Effect, stderr: &str) -> Option<String> {
@@ -297,8 +327,7 @@ fn is_missing_moon_task(stdout: &str, stderr: &str, task: MoonTask) -> bool {
     combined.contains("No tasks found for target(s)") && combined.contains(task.as_arg())
 }
 
-async fn prepare_workspace(
-    executor: &dyn CommandExecutor,
+fn prepare_workspace(
     workspace: WorkspaceName,
     path: String,
 ) -> Result<EffectJournalEntry, LifecycleError> {
@@ -306,20 +335,13 @@ async fn prepare_workspace(
         workspace: workspace.clone(),
         path: path.clone(),
     });
-    let timeout = Duration::from_secs(timeout_secs);
-    let args = vec!["workspace".to_owned(), "forget".to_owned(), workspace.as_str().to_owned()];
-    let forget_result = executor.run("jj", &args, timeout, None).await;
     let path_result = remove_workspace_dir(&path);
-    let stderr = match forget_result {
-        Ok(_) => String::new(),
-        Err(error) => error.to_string(),
-    };
     path_result.map(|stdout| EffectJournalEntry {
         effect: Effect::WorkspacePrepare { workspace, path },
         timeout_secs,
         success: true,
         stdout,
-        stderr,
+        stderr: String::new(),
     })
 }
 
@@ -376,4 +398,40 @@ fn workspace_cleanup_exhausted_error(path: &str) -> LifecycleError {
         FailureCategory::Workspace,
         format!("failed to clean workspace directory {path}: retry exhausted"),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{opencode_output_error_kind, opencode_output_is_error, OpencodeOutputErrorKind};
+
+    #[test]
+    fn opencode_output_is_error_detects_known_subprocess_error_shapes() {
+        assert!(opencode_output_is_error(r#"{"type":"error","message":"provider failed"}"#, ""));
+        assert_eq!(
+            opencode_output_error_kind("", "ProviderModelNotFoundError: bad/model"),
+            Some(OpencodeOutputErrorKind::InvalidModel)
+        );
+        assert_eq!(
+            opencode_output_error_kind("", "Model not found: bad/model"),
+            Some(OpencodeOutputErrorKind::InvalidModel)
+        );
+    }
+
+    #[test]
+    fn opencode_output_is_error_detects_known_http_error_shapes() {
+        assert_eq!(
+            opencode_output_error_kind("", "unauthorized: password=server-secret-token"),
+            Some(OpencodeOutputErrorKind::AuthFailure)
+        );
+        assert_eq!(
+            opencode_output_error_kind("", r#"{"type": "error", "message": "boom"}"#),
+            Some(OpencodeOutputErrorKind::ErrorEvent)
+        );
+    }
+
+    #[test]
+    fn opencode_output_is_error_ignores_success_output() {
+        assert!(!opencode_output_is_error(r#"{"type":"message","message":"ok"}"#, ""));
+        assert_eq!(opencode_output_error_kind("", ""), None);
+    }
 }

@@ -84,22 +84,23 @@ Do not document direct cargo commands as operator-facing gate commands.
 
 ## Workspace Isolation
 
-- jj remains the isolation and merge-flow primitive.
-- No stream is active to replace or remove jj.
+- Git branches are the default isolation primitive.
+- Git worktrees are used only when physical directory isolation is required.
+- GitHub PRs are the merge-flow primitive.
 
-## Phase 2: jj + OpenCode Polling
+## Phase 2: Git + OpenCode Polling
 
-OYA now ties stage execution to jj workspace lifecycle for implementation stages and exposes a
+OYA ties stage execution to Git branch/worktree lifecycle for implementation stages and exposes a
 small ops-monitor service for OpenCode observability.
 
-### jj workspace lifecycle
+### Git workspace lifecycle
 
 - For `contract`, `tdd15`, `qa`, `red_queen`, `gpt_review`, and `ship_gate`, OYA runs:
-  1. `jj workspace add <workspace>`
-  2. `jj git fetch && jj rebase`
-- Workspace name is deterministic: `oya-<run_id>-<stage>-a<attempt>` (normalized and validated).
-- OYA persists workspace command evidence in stage state and timeline.
-- Set `OYA_SKIP_JJ_WORKSPACE=1` to disable workspace setup in local/dev scenarios.
+  1. `git fetch origin`
+  2. `git rebase origin/main`
+  3. optional `git worktree add <path> <branch>` when physical isolation is required.
+- Branch/worktree names are deterministic: `oya-<run_id>-<stage>-a<attempt>` (normalized and validated).
+- OYA persists Git command evidence in stage state and timeline.
 
 ### OpenCode monitor endpoints
 

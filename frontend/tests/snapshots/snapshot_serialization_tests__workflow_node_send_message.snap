@@ -1,0 +1,8 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&WorkflowNode::SendMessage(SendMessageConfig\n{ target: Some(\"notification-service\".to_string()), })"
+---
+{
+  "type": "send-message",
+  "target": "notification-service"
+}

@@ -26,7 +26,7 @@ This document defines the unified structural blueprint for Oya, a durable workfl
 Oya is a **durable workflow orchestrator** that:
 
 - Picks ready beads from Steve Yegge's beads system
-- Creates isolated jj workspaces for each bead
+- Creates isolated Git branches or Git worktrees for each bead when isolation is required
 - Runs AI execution via OpenCode CLI
 - Executes quality gates via Moon
 - Manages PR creation and merging
@@ -84,8 +84,8 @@ Oya's architecture reflects the nine aspects of Oya (Yoruba storm goddess):
        └── fmt, clippy, test, build, coverage, mutants
 
 9. Workspace Plane (The Hands)
-   └── workspace-plane (jj integration)
-       └── Isolation, rebase, merge, bookmark management
+   └── workspace-plane (Git/GitHub integration)
+       └── Branch isolation, rebase, PR management
 ```
 
 ---
@@ -587,11 +587,11 @@ Attempt 1
 └──────────────────┘
 
 ┌──────────────────┐
-│ jj (Jujutsu)     │  Workspace isolation
-│                  │  - jj workspace add
-│                  │  - jj rebase
-│                  │  - jj bookmark
-│                  │  - jj git push
+│ Git/GitHub       │  Workspace isolation and PR flow
+│                  │  - git switch
+│                  │  - git worktree add
+│                  │  - git rebase
+│                  │  - git push
 └──────────────────┘
 
 ┌──────────────────┐
@@ -674,7 +674,7 @@ Attempt 1
          ▼
 ┌──────────────────┐
 │  OpenCode CLI    │
-│  jj CLI          │
+│  Git CLI         │
 │  Moon            │
 │  gh CLI          │
 │  bd (beads)      │
@@ -912,7 +912,7 @@ Exported:
 | Service not registered | Handler not started | `oya init` |
 | Bead blocked | Max retries exceeded | Check logs, fix issue, retry |
 | Tests failing | Implementation incomplete | Continue green stage |
-| Merge conflict | Main diverged | `jj rebase -d main@origin` |
+| Merge conflict | Main diverged | `git fetch origin && git rebase origin/main` |
 
 ### Diagnostic Commands
 

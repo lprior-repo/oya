@@ -3,12 +3,12 @@ use super::execution::{
     run_lifecycle_with_progress, step_details, strip_diff_prefix, validate_workspace_changes,
 };
 use super::progress::timestamp_now;
-use super::steps::{LifecycleStep, StepTransition};
+use super::steps::{build_steps, LifecycleStep, StepTransition};
 use super::types::{LifecycleProgressUpdate, LifecycleRunRequest, LifecycleStepStatus};
 use crate::lifecycle::effects::{
     CommandExecutor, CommandFailure, CommandResult, Effect, EffectJournalEntry,
 };
-use crate::lifecycle::types::FailureCategory;
+use crate::lifecycle::types::{BeadData, BeadId, FailureCategory, Model};
 use async_trait::async_trait;
 use chrono::DateTime;
 use std::collections::VecDeque;
@@ -79,7 +79,7 @@ fn workspace_path(workspace: &str) -> String {
 
 fn opencode_prompt(bead: &str) -> String {
     format!(
-        "Implement bead {bead} in this workspace using functional-rust approach and tests derived from contract. Do not call `oya` or `br`. Use moon/jj/gh as needed. Return one JSON receipt object with required keys: objective, allowed_scope, files_touched, commands, exit_codes, key_stdout_stderr, diff_summary, risks_unknowns, pass_fail_recommendation.",
+        "Implement bead {bead} in this workspace using functional-rust approach and tests derived from contract. Do not call `oya` or `br`. Use Moon for build/test/lint, OpenCode for agent execution, and Git/GitHub for version-control and PR flow. Do not require any non-Git version-control tool. Return one JSON receipt object with required keys: objective, allowed_scope, files_touched, commands, exit_codes, key_stdout_stderr, diff_summary, risks_unknowns, pass_fail_recommendation.",
     )
 }
 
@@ -87,6 +87,77 @@ fn qa_prompt(bead: &str) -> String {
     format!(
         "Run qa-enforcer verification for bead {bead} against implemented contract and tests. Execute adversarial and regression checks. Return one JSON receipt object with required keys: objective, allowed_scope, files_touched, commands, exit_codes, key_stdout_stderr, diff_summary, risks_unknowns, pass_fail_recommendation. Exit non-zero when verdict is fail.",
     )
+}
+
+#[test]
+fn git_only_vcs_proof_routes_git_operations_through_jj() {
+    let Ok(bead_id) = BeadId::parse("git-only-vcs") else {
+        assert!(false, "test bead id should parse");
+        return;
+    };
+    let bead = BeadData::from_bead_id(bead_id);
+    let steps = build_steps(&bead, &Model::default_model(), Some("priorlewis43/oya"));
+
+    assert_jj_args(&steps, "jj_sync_main", &["git", "fetch", "--remote", "origin"]);
+    assert_jj_args(
+        &steps,
+        "bookmark_push",
+        &["git", "push", "--remote", "origin", "--bookmark", "git-only-vcs"],
+    );
+    assert_eq!(git_subcommand_steps(&steps), vec!["jj_sync_main", "bookmark_push"]);
+}
+
+#[test]
+fn workflow_prompt_guides_agents_to_git_only_version_control() {
+    let Ok(bead_id) = BeadId::parse("git-only-prompt") else {
+        assert!(false, "test bead id should parse");
+        return;
+    };
+    let bead = BeadData::from_bead_id(bead_id);
+    let steps = build_steps(&bead, &Model::default_model(), Some("priorlewis43/oya"));
+    let Some(prompt) = opencode_prompt_for_step(&steps) else {
+        assert!(false, "opencode step should have an agent prompt");
+        return;
+    };
+
+    assert!(prompt.contains("Use Moon for build/test/lint"));
+    assert!(prompt.contains("OpenCode for agent execution"));
+    assert!(prompt.contains("Git/GitHub for version-control and PR flow"));
+    assert!(prompt.contains("Do not require any non-Git version-control tool"));
+    assert!(!prompt.contains("Use moon/jj/gh"));
+    assert!(!prompt.contains("jj"));
+    assert!(!prompt.contains("Jujutsu"));
+}
+
+fn opencode_prompt_for_step(steps: &[LifecycleStep]) -> Option<&str> {
+    steps.iter().find(|step| step.name == "opencode").and_then(|step| match &step.effect {
+        Effect::Opencode { prompt, .. } => Some(prompt.as_str()),
+        _ => None,
+    })
+}
+
+fn assert_jj_args(steps: &[LifecycleStep], name: &str, expected: &[&str]) {
+    let actual = jj_args_for_step(steps, name);
+    assert_eq!(actual.as_deref(), Some(expected));
+}
+
+fn jj_args_for_step<'a>(steps: &'a [LifecycleStep], name: &str) -> Option<Vec<&'a str>> {
+    steps.iter().find(|step| step.name == name).and_then(|step| match &step.effect {
+        Effect::Jj { args, .. } => Some(args.iter().map(String::as_str).collect()),
+        _ => None,
+    })
+}
+
+fn git_subcommand_steps(steps: &[LifecycleStep]) -> Vec<&str> {
+    steps
+        .iter()
+        .filter(|step| jj_args_for_step(steps, &step.name).is_some_and(args_start_with_git))
+        .map(|step| step.name.as_str())
+        .collect()
+}
+
+fn args_start_with_git(args: Vec<&str>) -> bool {
+    args.first().copied() == Some("git")
 }
 
 fn valid_receipt_json() -> &'static str {
@@ -117,7 +188,6 @@ async fn run_lifecycle_success_path_executes_jj_only_git_bridge() {
     let pr_body = "## Summary\n- Implements bead `edge-test-001` via lifecycle automation\n- Runs `moon run :ci` in workspace before opening PR\n- Publishes lifecycle status updates for polling";
     let executor = ScriptedExecutor::new(vec![
         call("bd", &["update", bead, "--status", "in_progress"], None, ok("")),
-        call("jj", &["workspace", "forget", workspace], None, ok("")),
         call("jj", &["workspace", "add", &ws_path, "--name", workspace], None, ok("")),
         call(
             "opencode",
@@ -176,7 +246,6 @@ async fn run_lifecycle_success_path_executes_jj_only_git_bridge() {
             Some(&ws_path),
             ok("https://github.com/lprior-repo/oya/pull/321\n"),
         ),
-        call("jj", &["workspace", "forget", workspace], None, ok("")),
     ]);
 
     let mut progress = Vec::<LifecycleProgressUpdate>::new();
@@ -195,6 +264,7 @@ async fn run_lifecycle_success_path_executes_jj_only_git_bridge() {
     assert!(result.is_ok());
     let outcome = result.expect("success outcome");
     assert_eq!(outcome.compensation_journal.len(), 1);
+    assert_filesystem_workspace_cleanup(&outcome.compensation_journal, 1);
     assert!(
         progress
             .iter()
@@ -222,7 +292,6 @@ async fn run_lifecycle_pr_output_without_url_triggers_terminal_compensations() {
     let qa = qa_prompt(bead);
     let executor = ScriptedExecutor::new(vec![
         call("bd", &["update", bead, "--status", "in_progress"], None, ok("")),
-        call("jj", &["workspace", "forget", workspace], None, ok("")),
         call("jj", &["workspace", "add", &ws_path, "--name", workspace], None, ok("")),
         call(
             "opencode",
@@ -279,7 +348,6 @@ async fn run_lifecycle_pr_output_without_url_triggers_terminal_compensations() {
             Some(&ws_path),
             ok("created but no url in output\n"),
         ),
-        call("jj", &["workspace", "forget", workspace], None, ok("")),
         call(
             "bd",
             &[
@@ -293,7 +361,6 @@ async fn run_lifecycle_pr_output_without_url_triggers_terminal_compensations() {
             None,
             ok(""),
         ),
-        call("jj", &["workspace", "forget", workspace], None, ok("")),
     ]);
 
     let result = run_lifecycle_with_progress(
@@ -309,6 +376,7 @@ async fn run_lifecycle_pr_output_without_url_triggers_terminal_compensations() {
     assert_eq!(failure.error.category(), FailureCategory::PullRequest);
     assert!(failure.error.is_terminal());
     assert_eq!(failure.compensation_journal.len(), 3);
+    assert_filesystem_workspace_cleanup(&failure.compensation_journal, 2);
 }
 
 #[tokio::test]
@@ -320,7 +388,6 @@ async fn run_lifecycle_existing_pr_in_stderr_is_treated_as_success() {
     let qa = qa_prompt(bead);
     let executor = ScriptedExecutor::new(vec![
         call("bd", &["update", bead, "--status", "in_progress"], None, ok("")),
-        call("jj", &["workspace", "forget", workspace], None, ok("")),
         call("jj", &["workspace", "add", &workspace_path, "--name", workspace], None, ok("")),
         call(
             "opencode",
@@ -377,7 +444,6 @@ async fn run_lifecycle_existing_pr_in_stderr_is_treated_as_success() {
             Some(&workspace_path),
             non_zero("a pull request for branch \"edge-test-002b\" into branch \"main\" already exists:\nhttps://github.com/lprior-repo/oya/pull/4242\n"),
         ),
-        call("jj", &["workspace", "forget", workspace], None, ok("")),
     ]);
 
     let mut progress = Vec::<LifecycleProgressUpdate>::new();
@@ -407,7 +473,6 @@ async fn run_lifecycle_transient_failure_skips_terminal_compensations() {
     let prompt = opencode_prompt(bead);
     let executor = ScriptedExecutor::new(vec![
         call("bd", &["update", bead, "--status", "in_progress"], None, ok("")),
-        call("jj", &["workspace", "forget", workspace], None, ok("")),
         call("jj", &["workspace", "add", &workspace_path, "--name", workspace], None, ok("")),
         call(
             "opencode",
@@ -433,7 +498,6 @@ async fn run_lifecycle_transient_failure_skips_terminal_compensations() {
             Some(&workspace_path),
             non_zero("simulated opencode transient failure"),
         ),
-        call("jj", &["workspace", "forget", workspace], None, ok("")),
     ]);
 
     let result = run_lifecycle_with_progress(
@@ -450,6 +514,7 @@ async fn run_lifecycle_transient_failure_skips_terminal_compensations() {
     assert!(!failure.error.is_terminal());
     assert!(failure.error.message().contains("after 4 attempts (3 retries)"));
     assert_eq!(failure.compensation_journal.len(), 1);
+    assert_filesystem_workspace_cleanup(&failure.compensation_journal, 1);
 }
 
 #[tokio::test]
@@ -462,7 +527,6 @@ async fn run_lifecycle_transient_opencode_recovers_after_retry() {
     let pr_body = "## Summary\n- Implements bead `edge-test-003b` via lifecycle automation\n- Runs `moon run :ci` in workspace before opening PR\n- Publishes lifecycle status updates for polling";
     let executor = ScriptedExecutor::new(vec![
         call("bd", &["update", bead, "--status", "in_progress"], None, ok("")),
-        call("jj", &["workspace", "forget", workspace], None, ok("")),
         call("jj", &["workspace", "add", &workspace_path, "--name", workspace], None, ok("")),
         call(
             "opencode",
@@ -525,7 +589,6 @@ async fn run_lifecycle_transient_opencode_recovers_after_retry() {
             Some(&workspace_path),
             ok("https://github.com/lprior-repo/oya/pull/333\n"),
         ),
-        call("jj", &["workspace", "forget", workspace], None, ok("")),
     ]);
 
     let result = run_lifecycle_with_progress(
@@ -537,6 +600,23 @@ async fn run_lifecycle_transient_opencode_recovers_after_retry() {
 
     executor.assert_empty();
     assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn run_lifecycle_rejects_invalid_bead_id_before_effects() {
+    let executor = ScriptedExecutor::new(Vec::new());
+    let result = run_lifecycle_with_progress(
+        &executor,
+        LifecycleRunRequest { bead_id: Some("bad/../id".to_owned()), model: None, repo: None },
+        |_| {},
+    )
+    .await;
+
+    executor.assert_empty();
+    assert!(result.is_err());
+    let failure = result.expect_err("expected validation failure");
+    assert_eq!(failure.error.category(), FailureCategory::Validation);
+    assert!(failure.error.message().contains("invalid chars"));
 }
 
 #[tokio::test]
@@ -590,7 +670,6 @@ async fn run_lifecycle_fails_when_only_bead_files_changed() {
     let qa = qa_prompt(bead);
     let executor = ScriptedExecutor::new(vec![
         call("bd", &["update", bead, "--status", "in_progress"], None, ok("")),
-        call("jj", &["workspace", "forget", workspace], None, ok("")),
         call("jj", &["workspace", "add", &workspace_path, "--name", workspace], None, ok("")),
         call(
             "opencode",
@@ -623,7 +702,6 @@ async fn run_lifecycle_fails_when_only_bead_files_changed() {
             Some(&workspace_path),
             ok(".beads/beads.db\n"),
         ),
-        call("jj", &["workspace", "forget", workspace], None, ok("")),
         call(
             "bd",
             &[
@@ -637,7 +715,6 @@ async fn run_lifecycle_fails_when_only_bead_files_changed() {
             None,
             ok(""),
         ),
-        call("jj", &["workspace", "forget", workspace], None, ok("")),
     ]);
 
     let result = run_lifecycle_with_progress(
@@ -663,7 +740,6 @@ async fn run_lifecycle_fails_when_opencode_receipt_is_missing_fields() {
     let prompt = opencode_prompt(bead);
     let executor = ScriptedExecutor::new(vec![
         call("bd", &["update", bead, "--status", "in_progress"], None, ok("")),
-        call("jj", &["workspace", "forget", workspace], None, ok("")),
         call("jj", &["workspace", "add", &workspace_path, "--name", workspace], None, ok("")),
         call(
             "opencode",
@@ -671,7 +747,6 @@ async fn run_lifecycle_fails_when_opencode_receipt_is_missing_fields() {
             Some(&workspace_path),
             ok("{\"status\":\"ok\"}"),
         ),
-        call("jj", &["workspace", "forget", workspace], None, ok("")),
         call(
             "bd",
             &[
@@ -685,7 +760,6 @@ async fn run_lifecycle_fails_when_opencode_receipt_is_missing_fields() {
             None,
             ok(""),
         ),
-        call("jj", &["workspace", "forget", workspace], None, ok("")),
     ]);
 
     let result = run_lifecycle_with_progress(
@@ -712,7 +786,6 @@ async fn run_lifecycle_qa_failure_retries_three_times_then_blocks() {
     let qa = qa_prompt(bead);
     let executor = ScriptedExecutor::new(vec![
         call("bd", &["update", bead, "--status", "in_progress"], None, ok("")),
-        call("jj", &["workspace", "forget", workspace], None, ok("")),
         call("jj", &["workspace", "add", &workspace_path, "--name", workspace], None, ok("")),
         call(
             "opencode",
@@ -762,7 +835,6 @@ async fn run_lifecycle_qa_failure_retries_three_times_then_blocks() {
             Some(&workspace_path),
             non_zero("qa failed"),
         ),
-        call("jj", &["workspace", "forget", workspace], None, ok("")),
         call(
             "bd",
             &[
@@ -776,7 +848,6 @@ async fn run_lifecycle_qa_failure_retries_three_times_then_blocks() {
             None,
             ok(""),
         ),
-        call("jj", &["workspace", "forget", workspace], None, ok("")),
     ]);
 
     let result = run_lifecycle_with_progress(
@@ -792,6 +863,26 @@ async fn run_lifecycle_qa_failure_retries_three_times_then_blocks() {
     assert!(failure.error.is_terminal());
     assert_eq!(failure.error.category(), FailureCategory::Command);
     assert_eq!(failure.compensation_journal.len(), 3);
+    assert_filesystem_workspace_cleanup(&failure.compensation_journal, 2);
+}
+
+fn assert_filesystem_workspace_cleanup(entries: &[EffectJournalEntry], expected_count: usize) {
+    assert_eq!(workspace_cleanup_count(entries), expected_count);
+    assert!(!entries.iter().any(is_jj_workspace_forget));
+}
+
+fn workspace_cleanup_count(entries: &[EffectJournalEntry]) -> usize {
+    entries.iter().filter(|entry| matches!(entry.effect, Effect::WorkspacePrepare { .. })).count()
+}
+
+fn is_jj_workspace_forget(entry: &EffectJournalEntry) -> bool {
+    match &entry.effect {
+        Effect::Jj { args, .. } => {
+            args.first().is_some_and(|arg| arg == "workspace")
+                && args.get(1).is_some_and(|arg| arg == "forget")
+        }
+        _ => false,
+    }
 }
 
 #[test]

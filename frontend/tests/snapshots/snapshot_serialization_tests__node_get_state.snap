@@ -1,0 +1,22 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&node"
+---
+{
+  "id": "00000000-0000-0000-0000-000000000006",
+  "name": "Read Cart",
+  "category": "state",
+  "icon": "database",
+  "x": 200.0,
+  "y": 300.0,
+  "last_output": null,
+  "selected": false,
+  "executing": false,
+  "skipped": false,
+  "node_type": "get-state",
+  "description": "Get state value",
+  "config": {
+    "key": "cart",
+    "type": "get-state"
+  }
+}

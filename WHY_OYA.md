@@ -152,7 +152,7 @@ The current architecture reflects this:
 4. opencode-adapter - The voice (AI execution via CLI subprocess)
 5. sled-store       - The memory (durable run and evidence state)
 6. gate-runner      - The judgment (Moon quality gates)
-7. workspace-plane  - The hands (zjj isolation and merge flow)
+7. workspace-plane  - The hands (Git branch/worktree isolation and PR flow)
 8. evidence-plane   - The witness (artifacts and rationale)
 9. oya-cli          - The mouth (operator command interface)
 ```

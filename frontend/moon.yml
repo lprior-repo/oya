@@ -1,0 +1,68 @@
+$schema: "https://moonrepo.dev/schemas/project.json"
+
+tasks:
+  serve:
+    script: |
+      npm ci --prefer-offline --no-audit
+      node_modules/.bin/tailwindcss -i ./assets/tailwind.input.css -o ./assets/tailwind.css
+      fuser -k 8081/tcp || true
+      env -u RUSTC_WRAPPER dx serve --platform web --port 8081
+    options:
+      cache: false
+
+  check:
+    command: "cargo check"
+    options:
+      mergeArgs: replace
+
+  test:
+    command: "cargo test"
+    options:
+      mergeArgs: replace
+
+  e2e:
+    script: |
+      npm ci --prefer-offline --no-audit
+      node_modules/.bin/playwright install chromium
+      fuser -k 8081/tcp || true
+      node_modules/.bin/playwright test
+    options:
+      cache: false
+
+  clippy:
+    command: "cargo clippy -- -D warnings -D clippy::unwrap_used -D clippy::expect_used -D clippy::panic"
+    options:
+      mergeArgs: replace
+
+  fmt:
+    command: "cargo fmt --check"
+    options:
+      mergeArgs: replace
+
+  build-web:
+    script: |
+      npm ci --prefer-offline --no-audit
+      node_modules/.bin/tailwindcss -i ./assets/tailwind.input.css -o ./assets/tailwind.css
+      env -u RUSTC_WRAPPER dx build --platform web
+      mkdir -p target/dx/oya-frontend/debug/web/public/assets
+      cp assets/tailwind.css target/dx/oya-frontend/debug/web/public/assets/tailwind.css
+
+  coverage:
+    command: "cargo llvm-cov --summary-only"
+    options:
+      mergeArgs: replace
+
+  coverage-core:
+    command: "cargo llvm-cov --summary-only --ignore-filename-regex '(src/main.rs|src/bin/|src/ui/|src/hooks/)'"
+
+  ci:
+    script: |
+      cargo fmt --check --quiet
+      cargo check
+      cargo test
+      cargo clippy -- -D warnings -D clippy::unwrap_used -D clippy::expect_used -D clippy::panic
+    options:
+      mergeArgs: replace
+
+  scan-secrets:
+    command: "./scripts/scan-secrets.sh"

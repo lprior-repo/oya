@@ -1,0 +1,6 @@
+$schema: "https://moonrepo.dev/schemas/workspace.json"
+vcs:
+  defaultBranch: "main"
+
+projects:
+  root: "."

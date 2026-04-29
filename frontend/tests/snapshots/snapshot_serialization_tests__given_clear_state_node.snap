@@ -1,0 +1,22 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&node"
+---
+{
+  "id": "00000000-0000-0000-0000-00000000003f",
+  "name": "Clear State",
+  "category": "state",
+  "icon": "trash",
+  "x": 270.0,
+  "y": 280.0,
+  "last_output": null,
+  "selected": false,
+  "executing": false,
+  "skipped": false,
+  "node_type": "clear-state",
+  "description": "Clear state value",
+  "config": {
+    "key": "user-session",
+    "type": "clear-state"
+  }
+}

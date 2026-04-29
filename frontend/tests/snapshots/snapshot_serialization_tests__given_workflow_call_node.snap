@@ -1,0 +1,22 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&node"
+---
+{
+  "id": "00000000-0000-0000-0000-00000000003a",
+  "name": "Workflow Call",
+  "category": "durable",
+  "icon": "workflow",
+  "x": 170.0,
+  "y": 180.0,
+  "last_output": null,
+  "selected": false,
+  "executing": false,
+  "skipped": false,
+  "node_type": "workflow-call",
+  "description": "Call Restate workflow",
+  "config": {
+    "type": "workflow-call",
+    "workflow_name": "handle-refund"
+  }
+}

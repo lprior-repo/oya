@@ -138,7 +138,7 @@ fn jj_rebase_main_step(bead: &BeadData) -> LifecycleStep {
 
 fn opencode_step(bead: &BeadData, model: &Model) -> LifecycleStep {
     let prompt = format!(
-        "Implement bead {} in this workspace using functional-rust approach and tests derived from contract. Do not call `oya` or `br`. Use moon/jj/gh as needed. Return one JSON receipt object with required keys: objective, allowed_scope, files_touched, commands, exit_codes, key_stdout_stderr, diff_summary, risks_unknowns, pass_fail_recommendation.",
+        "Implement bead {} in this workspace using functional-rust approach and tests derived from contract. Do not call `oya` or `br`. Use Moon for build/test/lint, OpenCode for agent execution, and Git/GitHub for version-control and PR flow. Do not require any non-Git version-control tool. Return one JSON receipt object with required keys: objective, allowed_scope, files_touched, commands, exit_codes, key_stdout_stderr, diff_summary, risks_unknowns, pass_fail_recommendation.",
         bead.bead_id.as_str()
     );
     LifecycleStep {

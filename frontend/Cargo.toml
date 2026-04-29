@@ -1,0 +1,61 @@
+[workspace]
+
+[package]
+name = "oya-frontend"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dioxus = { version = "0.7.6", features = ["web"] }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+web-sys = { version = "0.3", features = ["Window", "Storage", "Document", "Element", "HtmlAnchorElement", "Blob", "Url", "MouseEvent", "Navigator", "Clipboard"] }
+uuid = { version = "1.0", features = ["v4", "serde", "js"] }
+thiserror = "2.0"
+reqwest = { version = "0.11", features = ["json"] }
+chrono = { version = "0.4", features = ["serde"] }
+gloo-timers = { version = "0.3", features = ["futures"] }
+itertools = "0.14"
+oya-contracts = { path = "../crates/oya-contracts" }
+tap = "1.0"
+rpds = "1.2"
+im = "15.1"
+anyhow = "1.0"
+petgraph = "0.8.3"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1", features = ["full"] }
+clap = { version = "4.0", features = ["derive"] }
+tempfile = "3.3"
+
+[dev-dependencies]
+playwright = "0.0.20"
+tokio = { version = "1", features = ["full"] }
+proptest = "1.7.0"
+criterion = "0.5"
+insta = { version = "1.39", features = ["json", "yaml"] }
+wiremock = "0.6"
+
+[lib]
+name = "oya_frontend"
+path = "src/lib.rs"
+
+[[bin]]
+name = "oya-frontend"
+path = "src/main.rs"
+
+[[bin]]
+name = "agent-feedback"
+path = "src/bin/agent_feedback.rs"
+
+[[bin]]
+name = "coverage"
+path = "src/bin/coverage.rs"
+
+[[bin]]
+name = "quality-gate"
+path = "src/bin/quality-gate.rs"

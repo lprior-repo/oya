@@ -65,7 +65,7 @@ gate.
 
 ### Slice 0 — Git-Only VCS Baseline
 - **User-visible path**: `oya doctor` and repository proof checks.
-- **Includes**: removal of non-Git VCS command assumptions from active docs, CLI
+- **Includes**: removal of alternate-VCS command assumptions from active docs, CLI
   help, lifecycle code, tests, and health checks.
 - **Acceptance demo**: Oya builds, tests, and runs with only Git installed; active
   product docs and task plans describe Git-only branch/PR flow.

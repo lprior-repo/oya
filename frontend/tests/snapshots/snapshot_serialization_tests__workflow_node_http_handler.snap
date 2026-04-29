@@ -1,0 +1,9 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&WorkflowNode::HttpHandler(HttpHandlerConfig\n{ path: Some(\"/health\".to_string()), method: Some(\"GET\".to_string()), })"
+---
+{
+  "type": "http-handler",
+  "path": "/health",
+  "method": "GET"
+}

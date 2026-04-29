@@ -1,0 +1,10 @@
+[application]
+name = "oya-frontend"
+default_platform = "web"
+out_dir = "dist"
+
+[web.app]
+title = "Oya Frontend"
+
+[web.watcher]
+watch_path = ["src", "style.css"]

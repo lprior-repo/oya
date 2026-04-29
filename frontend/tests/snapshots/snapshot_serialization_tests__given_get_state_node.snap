@@ -1,0 +1,22 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&node"
+---
+{
+  "id": "00000000-0000-0000-0000-00000000003d",
+  "name": "Get State",
+  "category": "state",
+  "icon": "database",
+  "x": 230.0,
+  "y": 240.0,
+  "last_output": null,
+  "selected": false,
+  "executing": false,
+  "skipped": false,
+  "node_type": "get-state",
+  "description": "Get state value",
+  "config": {
+    "key": "user-session",
+    "type": "get-state"
+  }
+}

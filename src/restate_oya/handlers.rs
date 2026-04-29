@@ -14,13 +14,17 @@ use std::sync::{LazyLock, RwLock};
 use tokio::process::Command;
 
 use super::opencode::{
-    cancel_invocation, cancel_invocation_query, model_or_default, pipeline_prompt, run_opencode,
+    cancel_invocation, cancel_invocation_query, model_or_default, pipeline_prompt,
+    run_opencode_streaming,
 };
-use super::trace::{build_clean_trace, fallback_summary, parse_jsonl_events, summarize_events};
+use super::trace::{
+    apply_trace_event, build_clean_trace, empty_trace_snapshot, fallback_summary, finalize_trace,
+    parse_jsonl_events, summarize_events,
+};
 use super::types::{
     BeadSnapshot, BeadSyncRequest, CancelResponse, KeyRequest, LifecycleGateSnapshot,
     LifecycleRequest, LifecycleStatusSnapshot, LifecycleStepSnapshot, MemorySnapshot,
-    PipelineRequest, StartRequest, StartResponse,
+    OpenCodeTraceEvent, OpenCodeTraceSnapshot, PipelineRequest, StartRequest, StartResponse,
 };
 
 #[restate_sdk::object]
@@ -44,6 +48,9 @@ trait OyaService {
     async fn get_lifecycle(
         req: Json<KeyRequest>,
     ) -> Result<Json<LifecycleStatusSnapshot>, HandlerError>;
+    async fn get_opencode_trace(
+        req: Json<KeyRequest>,
+    ) -> Result<Json<OpenCodeTraceSnapshot>, HandlerError>;
     async fn cancel(req: Json<KeyRequest>) -> Result<Json<CancelResponse>, HandlerError>;
 }
 
@@ -66,6 +73,8 @@ pub fn init_state_db(db: crate::lifecycle::state::StateDb) {
 
 static RUNTIME_LIFECYCLE_STATUS: LazyLock<RwLock<HashMap<String, LifecycleStatusSnapshot>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
+static RUNTIME_OPENCODE_TRACE: LazyLock<RwLock<HashMap<String, OpenCodeTraceSnapshot>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
 
 impl Oya for OyaBridge {
     async fn run(
@@ -73,9 +82,10 @@ impl Oya for OyaBridge {
         ctx: WorkflowContext<'_>,
         req: Json<LifecycleRequest>,
     ) -> Result<Json<StartResponse>, HandlerError> {
-        let body = req.into_inner();
+        let mut body = req.into_inner();
         let workflow_key = ctx.key().to_owned();
         validate_runtime_key(&workflow_key)?;
+        body.bead_id = validate_optional_bead_id(body.bead_id)?;
         let initial_steps = default_step_snapshots();
         let requested_bead_id = body.bead_id.clone();
         initialize_lifecycle_status(&ctx, requested_bead_id.clone(), &initial_steps);
@@ -122,11 +132,24 @@ impl OyaMemory for OyaMemoryBridge {
         ctx: ObjectContext<'_>,
         req: Json<StartRequest>,
     ) -> Result<Json<StartResponse>, HandlerError> {
-        let body = req.into_inner();
+        let mut body = req.into_inner();
+        body.bead_id = validate_optional_bead_id(body.bead_id)?;
         persist_bead_state(&ctx, &body);
         let prompt = super::opencode::Prompt::parse(body.prompt).map_err(HandlerError::from)?;
         let model = model_or_default(body.model);
-        let output = ctx.run(move || run_opencode(prompt, model)).name("opencode_run").await?;
+        let trace_key = ctx.key().to_owned();
+        let model_label = model.as_str().to_owned();
+        seed_opencode_trace(&trace_key, body.bead_id, ctx.invocation_id(), &model_label);
+        let event_key = trace_key.clone();
+        let output_result = ctx
+            .run(move || {
+                run_opencode_streaming(prompt, model, move |event| {
+                    append_opencode_trace_event(&event_key, event);
+                })
+            })
+            .name("opencode_run")
+            .await;
+        let output = finalize_opencode_run(&trace_key, output_result)?;
         store_output(&ctx, &output);
         flush_memory_state(&ctx).await?;
         Ok(StartResponse { output }.into())
@@ -137,7 +160,8 @@ impl OyaMemory for OyaMemoryBridge {
         ctx: ObjectContext<'_>,
         req: Json<BeadSyncRequest>,
     ) -> Result<Json<StartResponse>, HandlerError> {
-        let bead = req.into_inner();
+        let mut bead = req.into_inner();
+        bead.bead_id = validate_bead_id(bead.bead_id)?;
         ctx.set("bead_id", bead.bead_id.clone());
         ctx.set("bead_status", bead.bead_status.clone());
         ctx.set("bead_state", Json::from(bead.bead_state));
@@ -162,10 +186,22 @@ impl OyaMemory for OyaMemoryBridge {
         let model = model_or_default(req.into_inner().model);
         ctx.set("active_invocation_id", ctx.invocation_id().to_owned());
         ctx.set("cancel_state", "active".to_owned());
-        let bead_id = require_state_string(&ctx, "bead_id").await?;
+        let bead_id = validate_bead_id(require_state_string(&ctx, "bead_id").await?)?;
         let bead_state = require_state_json(&ctx, "bead_state").await?;
         let prompt = pipeline_prompt(&bead_id, bead_state)?;
-        let output = ctx.run(move || run_opencode(prompt, model)).name("opencode_pipeline").await?;
+        let trace_key = ctx.key().to_owned();
+        let model_label = model.as_str().to_owned();
+        seed_opencode_trace(&trace_key, Some(bead_id.clone()), ctx.invocation_id(), &model_label);
+        let event_key = trace_key.clone();
+        let output_result = ctx
+            .run(move || {
+                run_opencode_streaming(prompt, model, move |event| {
+                    append_opencode_trace_event(&event_key, event);
+                })
+            })
+            .name("opencode_pipeline")
+            .await;
+        let output = finalize_opencode_run(&trace_key, output_result)?;
         store_output(&ctx, &output);
         ctx.clear("active_invocation_id");
         flush_memory_state(&ctx).await?;
@@ -318,6 +354,16 @@ impl OyaService for OyaServiceBridge {
         Ok(snapshot.into())
     }
 
+    async fn get_opencode_trace(
+        &self,
+        _ctx: Context<'_>,
+        req: Json<KeyRequest>,
+    ) -> Result<Json<OpenCodeTraceSnapshot>, HandlerError> {
+        let key = req.into_inner().key;
+        validate_runtime_key(&key)?;
+        Ok(get_opencode_trace_snapshot(&key).into())
+    }
+
     async fn cancel(
         &self,
         ctx: Context<'_>,
@@ -409,6 +455,79 @@ fn get_runtime_status(key: &str) -> Option<LifecycleStatusSnapshot> {
                 .filter(|snapshot| !is_uninitialized_workflow_snapshot(snapshot))
         })
     })
+}
+
+fn seed_opencode_trace(key: &str, bead_id: Option<String>, invocation_id: &str, model: &str) {
+    let now = chrono::Utc::now().to_rfc3339();
+    let snapshot = OpenCodeTraceSnapshot {
+        bead_id,
+        workflow_key: key.to_owned(),
+        active_invocation_id: Some(invocation_id.to_owned()),
+        model: Some(model.to_owned()),
+        started_at: Some(now.clone()),
+        updated_at: Some(now),
+        finished_at: None,
+        status: "running".to_owned(),
+        current_event: None,
+        events: Vec::new(),
+        tool_call_count: 0,
+        text_event_count: 0,
+        last_error: None,
+        summary: None,
+    };
+    store_opencode_trace(key, snapshot);
+}
+
+fn append_opencode_trace_event(key: &str, event: OpenCodeTraceEvent) {
+    let current = get_opencode_trace_snapshot(key);
+    store_opencode_trace(key, apply_trace_event(current, event));
+}
+
+fn finalize_opencode_run(
+    key: &str,
+    result: Result<String, TerminalError>,
+) -> Result<String, TerminalError> {
+    match result {
+        Ok(output) => {
+            let summary = parse_jsonl_events(&output).ok().map(|events| summarize_events(&events));
+            finalize_opencode_trace(key, true, None, summary);
+            Ok(output)
+        }
+        Err(error) => {
+            finalize_opencode_trace(key, false, Some(format!("{error:?}")), None);
+            Err(error)
+        }
+    }
+}
+
+fn finalize_opencode_trace(
+    key: &str,
+    success: bool,
+    last_error: Option<String>,
+    summary: Option<Value>,
+) {
+    let current = get_opencode_trace_snapshot(key);
+    let finished_at = chrono::Utc::now().to_rfc3339();
+    let next = finalize_trace(current, success, finished_at, last_error, summary);
+    store_opencode_trace(key, next);
+}
+
+fn get_opencode_trace_snapshot(key: &str) -> OpenCodeTraceSnapshot {
+    RUNTIME_OPENCODE_TRACE
+        .read()
+        .ok()
+        .and_then(|map| {
+            runtime_lookup_keys(key).into_iter().find_map(|candidate| map.get(&candidate).cloned())
+        })
+        .unwrap_or_else(|| empty_trace_snapshot(key))
+}
+
+fn store_opencode_trace(key: &str, snapshot: OpenCodeTraceSnapshot) {
+    if let Ok(mut map) = RUNTIME_OPENCODE_TRACE.write() {
+        runtime_store_keys(key, snapshot.bead_id.as_deref()).into_iter().for_each(|candidate| {
+            map.insert(candidate, snapshot.clone());
+        });
+    }
 }
 
 async fn read_workflow_status(
@@ -1168,6 +1287,16 @@ fn extract_pr_url(stdout: &str) -> Option<String> {
         .map(std::borrow::ToOwned::to_owned)
 }
 
+fn validate_optional_bead_id(value: Option<String>) -> Result<Option<String>, HandlerError> {
+    value.map(validate_bead_id).transpose()
+}
+
+fn validate_bead_id(value: String) -> Result<String, HandlerError> {
+    BeadId::parse(&value)
+        .map(|bead_id| bead_id.as_str().to_owned())
+        .map_err(|error| TerminalError::new(format!("invalid bead id: {error}")).into())
+}
+
 fn persist_bead_state(ctx: &ObjectContext<'_>, request: &StartRequest) {
     if let Some(bead_id) = &request.bead_id {
         ctx.set("bead_id", bead_id.clone());
@@ -1271,11 +1400,16 @@ async fn require_state_json(ctx: &ObjectContext<'_>, key: &str) -> Result<Value,
 #[cfg(test)]
 mod tests {
     use super::{
+        append_opencode_trace_event, finalize_opencode_run, get_opencode_trace_snapshot,
         is_safe_runtime_key, is_uninitialized_workflow_snapshot, lifecycle_status_label,
-        parse_lifecycle_status_snapshot, upsert_step, StepUpdate,
+        parse_lifecycle_status_snapshot, seed_opencode_trace, upsert_step, validate_bead_id,
+        validate_optional_bead_id, StepUpdate,
     };
     use crate::lifecycle::workflow::LifecycleStepStatus;
-    use crate::restate_oya::types::{LifecycleStatusSnapshot, LifecycleStepSnapshot};
+    use crate::restate_oya::types::{
+        LifecycleStatusSnapshot, LifecycleStepSnapshot, OpenCodeTraceEvent,
+    };
+    use serde_json::json;
 
     #[test]
     fn upsert_step_preserves_timestamps_across_progress_updates() {
@@ -1376,5 +1510,96 @@ mod tests {
         assert!(!is_safe_runtime_key("a/b"));
         assert!(!is_safe_runtime_key("a b"));
         assert!(!is_safe_runtime_key("%00"));
+    }
+
+    #[test]
+    fn bead_id_boundary_validation_accepts_canonical_ids() {
+        let Ok(bead_id) = validate_bead_id("oya-8y3".to_owned()) else {
+            assert!(false, "canonical bead id should pass");
+            return;
+        };
+
+        assert_eq!(bead_id, "oya-8y3");
+        assert_eq!(
+            validate_optional_bead_id(Some("oya-8y3".to_owned())).ok().flatten().as_deref(),
+            Some("oya-8y3")
+        );
+    }
+
+    #[test]
+    fn bead_id_boundary_validation_rejects_path_like_ids() {
+        let Some(error) = validate_bead_id("bad/../id".to_owned()).err() else {
+            assert!(false, "path-like bead id should fail");
+            return;
+        };
+        let message = format!("{error:?}");
+
+        assert!(message.contains("invalid bead id"));
+        assert!(message.contains("invalid chars"));
+    }
+
+    #[test]
+    fn opencode_trace_cache_is_addressable_by_workflow_and_bead_keys() {
+        let workflow_key = "trace-workflow-cache-test";
+        let bead_key = "trace-bead-cache-test";
+
+        seed_opencode_trace(workflow_key, Some(bead_key.to_owned()), "inv_123", "test/model");
+        append_opencode_trace_event(workflow_key, trace_event(1, "tool_use"));
+
+        let by_workflow = get_opencode_trace_snapshot(workflow_key);
+        let by_workflow_path = get_opencode_trace_snapshot("Oya/trace-workflow-cache-test/run");
+        let by_bead = get_opencode_trace_snapshot(bead_key);
+
+        assert_eq!(by_workflow.workflow_key, workflow_key);
+        assert_eq!(by_workflow.status, "running");
+        assert_eq!(by_workflow.model.as_deref(), Some("test/model"));
+        assert_eq!(by_workflow.active_invocation_id.as_deref(), Some("inv_123"));
+        assert_eq!(by_workflow.tool_call_count, 1);
+        assert_eq!(by_workflow_path.tool_call_count, 1);
+        assert_eq!(by_bead.tool_call_count, 1);
+    }
+
+    #[test]
+    fn opencode_trace_cache_finalizes_success_summary() {
+        let workflow_key = "trace-finalize-cache-test";
+        seed_opencode_trace(workflow_key, None, "inv_456", "test/model");
+
+        let output = r#"{"type":"tool_use","part":{"tool":"bash"}}
+{"type":"text","part":{"text":"finished"}}"#
+            .to_owned();
+
+        let Ok(output) = finalize_opencode_run(workflow_key, Ok(output)) else {
+            assert!(false, "trace finalizes");
+            return;
+        };
+        let snapshot = get_opencode_trace_snapshot(workflow_key);
+
+        assert!(output.contains("tool_use"));
+        assert_eq!(snapshot.status, "succeeded");
+        assert!(snapshot.active_invocation_id.is_none());
+        assert_eq!(
+            snapshot.summary.as_ref().and_then(|value| value.get("event_count")),
+            Some(&json!(2))
+        );
+        assert_eq!(
+            snapshot.summary.as_ref().and_then(|value| value.get("tool_calls")),
+            Some(&json!(1))
+        );
+    }
+
+    fn trace_event(sequence: u64, kind: &str) -> OpenCodeTraceEvent {
+        OpenCodeTraceEvent {
+            sequence,
+            received_at: format!("2026-04-29T00:00:{sequence:02}Z"),
+            kind: kind.to_owned(),
+            step: Some(sequence),
+            tool: Some("bash".to_owned()),
+            description: None,
+            command: Some("moon run :test".to_owned()),
+            query: None,
+            text: None,
+            error: None,
+            raw: json!({ "type": kind }),
+        }
     }
 }

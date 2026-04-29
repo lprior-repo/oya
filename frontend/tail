@@ -1,0 +1,14 @@
+error: unexpected argument '-3' found
+
+  tip: to pass '-3' as a value, use '-- -3'
+
+Usage: moon run [OPTIONS] error: unexpected argument '-3' found
+
+  tip: to pass '-3' as a value, use '-- -3'
+
+Usage: moon run [OPTIONS] [TARGETS]... [-- <PASSTHROUGH>...]
+
+For more information, try '--help'.
+[TARGETS]... [-- <PASSTHROUGH>...]
+
+For more information, try '--help'.

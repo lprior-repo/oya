@@ -1,0 +1,45 @@
+$schema: "https://moonrepo.dev/schemas/tasks.json"
+tasks:
+  serve:
+    command: "dx serve --platform web --port 8081"
+    options:
+      cache: false
+
+  check:
+    command: "cargo check"
+
+  test:
+    command: "cargo test"
+
+  clippy:
+    command: "cargo clippy -- -D warnings -D clippy::unwrap_used -D clippy::expect_used -D clippy::panic"
+
+  fmt:
+    command: "cargo fmt --check"
+
+  build-web:
+    command: "dx build --platform web"
+
+  coverage:
+    command: "cargo llvm-cov --summary-only"
+
+  coverage-core:
+    command: "cargo llvm-cov --summary-only --ignore-filename-regex '(src/main.rs|src/bin/|src/ui/|src/hooks/)'"
+
+  audit:
+    command: "cargo audit"
+    options:
+      cache: false
+
+  outdated:
+    command: "cargo outdated --root-deps-only"
+    options:
+      cache: false
+
+  ci:
+    script: |
+      cargo check
+      cargo test
+      cargo clippy -- -D warnings -D clippy::unwrap_used -D clippy::expect_used -D clippy::panic
+    options:
+      cache: true

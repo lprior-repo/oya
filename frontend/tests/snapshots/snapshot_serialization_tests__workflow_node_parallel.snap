@@ -1,0 +1,8 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&WorkflowNode::Parallel(ParallelConfig { branches: Some(4) })"
+---
+{
+  "type": "parallel",
+  "branches": 4
+}

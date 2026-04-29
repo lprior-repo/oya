@@ -1,0 +1,64 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&workflow"
+---
+{
+  "nodes": [
+    {
+      "id": "00000000-0000-0000-0000-00000000001e",
+      "name": "A",
+      "category": "durable",
+      "icon": "play",
+      "x": 0.0,
+      "y": 0.0,
+      "last_output": null,
+      "selected": false,
+      "executing": false,
+      "skipped": false,
+      "node_type": "run",
+      "description": "Run arbitrary code",
+      "config": {
+        "code": null,
+        "durable_step_name": null,
+        "mapping": null,
+        "type": "run"
+      }
+    },
+    {
+      "id": "00000000-0000-0000-0000-00000000001f",
+      "name": "B",
+      "category": "timing",
+      "icon": "timer",
+      "x": 200.0,
+      "y": 0.0,
+      "last_output": null,
+      "selected": false,
+      "executing": false,
+      "skipped": false,
+      "node_type": "sleep",
+      "description": "Wait for duration",
+      "config": {
+        "duration_ms": 1000,
+        "type": "sleep"
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "33333333-3333-3333-3333-333333333333",
+      "source": "00000000-0000-0000-0000-00000000001e",
+      "target": "00000000-0000-0000-0000-00000000001f",
+      "source_port": "main",
+      "target_port": "main"
+    }
+  ],
+  "viewport": {
+    "x": 0.0,
+    "y": 0.0,
+    "zoom": 1.0
+  },
+  "execution_queue": [],
+  "current_step": 0,
+  "history": [],
+  "execution_records": []
+}

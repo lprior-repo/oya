@@ -1,0 +1,8 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&WorkflowNode::CronTrigger(CronTriggerConfig\n{ schedule: Some(\"0 * * * *\".to_string()), })"
+---
+{
+  "type": "cron-trigger",
+  "schedule": "0 * * * *"
+}

@@ -10,7 +10,7 @@ mod types;
 mod handlers_tests;
 
 pub use handlers::{init_state_db, serve};
-pub use opencode::pipeline_prompt;
+pub use opencode::{pipeline_prompt, OpencodeServerConfig};
 pub use types::{
     BeadSnapshot, BeadSyncRequest, CancelResponse, KeyRequest, LifecycleGateSnapshot,
     LifecycleRequest, LifecycleStatusSnapshot, LifecycleStepSnapshot, MemorySnapshot,

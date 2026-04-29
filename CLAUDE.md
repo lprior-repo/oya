@@ -1,26 +1,25 @@
 {"kind":"meta","version":"1.0","updated":"2026-02","project":"oya"}
 {"kind":"mandate","id":"moon-only","text":"MANDATORY: Use ONLY moon for ALL build/test/lint tasks. NEVER use cargo directly. Violation is a workflow failure."}
-{"kind":"skill","load":"/zjj","when":"first","purpose":"workspace isolation + queue"}
-{"kind":"skill","load":"/tdd15","when":"implementing","purpose":"TDD workflow"}
+{"kind":"guide","id":"git-only-vcs","text":"Use Git/GitHub for version-control, branch, and PR flow. Do not require alternate version-control tools for active Oya workflows."}
 {"kind":"skill","load":"/functional-rust-generator","when":"coding","purpose":"zero-panic rust"}
 {"kind":"skill","load":"/rust-contract","when":"planning","purpose":"contracts + tests"}
-{"kind":"workflow","name":"bead","steps":["br ready","zjj queue --add <ws> --bead <id>","zjj add <id>","br update <id> --status in_progress","/tdd15 <id>","moon run :ci","zjj sync","zjj done","br close <id>","br sync --flush-only"]}
-{"kind":"cmd","tool":"br","list":["ready","show <id>","update <id> --status in_progress","close <id>","sync --flush-only"]}
+{"kind":"workflow","name":"bead","steps":["bd ready","bd update <id> --status in_progress","moon run :ci","git fetch origin","git rebase origin/main","git push -u origin HEAD:<name>","bd close <id>","bd sync --flush-only"]}
+{"kind":"cmd","tool":"bd","list":["ready","show <id>","update <id> --status in_progress","close <id>","sync --flush-only","dolt push","dolt pull"]}
 {"kind":"cmd","tool":"moon","list":["run :quick","run :ci","run :test","run :fmt-fix","run :build","run :check","run :coverage","run :mutants-quick"]}
-{"kind":"cmd","tool":"zjj","list":["add <name>","queue --add <ws> --bead <id>","queue --list","queue --next","sync","done","focus <name>"]}
+{"kind":"cmd","tool":"git","list":["status --short","fetch origin","rebase origin/main","switch -c <branch>","worktree add <path> <branch>","push -u origin HEAD:<branch>","log --oneline -n 10"]}
 {"kind":"rule","id":"moon","text":"NEVER cargo. moon run only."}
 {"kind":"rule","id":"panic","text":"Zero unwrap/panic/expect. Result<T,E> + ?"}
 {"kind":"rule","id":"tdd","text":"Tests FIRST. RED-GREEN-REFACTOR."}
 {"kind":"rule","id":"clippy","text":"Fix code, never lint config."}
-{"kind":"rule","id":"queue","text":"zjj queue --add BEFORE zjj add."}
+{"kind":"rule","id":"workspace","text":"Use Git branch/worktree isolation before starting work when isolation is required."}
 {"kind":"lint","rust":"#![deny(clippy::unwrap_used)] #![deny(clippy::expect_used)] #![deny(clippy::panic)] #![forbid(unsafe_code)]"}
-{"kind":"land","steps":["moon run :ci","zjj sync","zjj done","br close <id>","br sync --flush-only","git add .beads/","git commit"]}
+{"kind":"land","steps":["moon run :ci","git fetch origin","git rebase origin/main","git status --short","bd close <id>","bd sync --flush-only","git add .beads/","git commit","git push -u origin HEAD:<branch>"]}
 {"kind":"ref","moon":"/home/lewis/src/oya/.moon/tasks.yml"}
 {"kind":"ref","rust":"/home/lewis/src/oya/docs/FUNCTIONAL_RUST.md"}
 {"kind":"ref","beads":"/home/lewis/src/oya/docs/BEADS.md"}
 {"kind":"restate","ui":"http://localhost:9070","ingress":"http://localhost:909","service":"http://localhost:9180","default_runtime":"oya init"}
 {"kind":"rule","id":"runtime-init","text":"Please use `oya init` to bootstrap local runtime. Use `oya init --down` to stop Docker Restate."}
-{"kind":"cmd","tool":"restate","list":["oya init (fresh Docker Restate + handler registration + validations)","oya init --down (stop Docker Restate)","scripts/pipeline-run.sh <run_id> <bead_id> [context] (run + observe pipeline)","http://localhost:9070 (Admin/UI)","http://localhost:909 (Ingress API)","http://localhost:909/restate/health (Health)","http://localhost:9180/discover (Oya discovery endpoint)","http://localhost:909/Oya/<id>/start/send (Start pipeline async)"]}
+{"kind":"cmd","tool":"restate","list":["oya init (fresh Docker Restate + handler registration + validations)","oya init --down (stop Docker Restate)","http://localhost:9070 (Admin/UI)","http://localhost:909 (Ingress API)","http://localhost:909/restate/health (Health)","http://localhost:9180/discover (Oya discovery endpoint)","http://localhost:909/Oya/<key>/run (workflow run endpoint)","http://localhost:909/OyaService/get_lifecycle (status endpoint)","http://localhost:909/OyaService/cancel (cancel endpoint)","http://localhost:909/OyaMemory/<id>/start (memory start endpoint)","http://localhost:909/OyaMemory/<id>/run_pipeline (memory pipeline endpoint)"]}
 {"kind":"section","title":"ATDD Workflow"}
 {"kind":"text","content":"The storm enforces TRUE test-driven development through the Red Gate pattern."}
 {"kind":"subsection","title":"Stage Sequence"}
@@ -42,4 +41,4 @@
 {"kind":"text","content":"Why? Passing tests mean either: (1) No implementation was needed, or (2) Tests are wrong. Both are workflow failures."}
 {"kind":"subsection","title":"Quality Gates"}
 {"kind":"text","content":"Each stage has gates that MUST pass:"}
-{"kind":"list","items":["AcceptanceTest: Compiles, AcceptanceTestsAreRed","Implementation: Compiles, TestsPass","QA: TestsPass, EdgeCases","RedQueen: NoVulnerabilities","GptReview: ClippyClean, Security","ShipGate: MoonCi, ZjjMergeQueue"]}
+{"kind":"list","items":["AcceptanceTest: Compiles, AcceptanceTestsAreRed","Implementation: Compiles, TestsPass","QA: TestsPass, EdgeCases","RedQueen: NoVulnerabilities","GptReview: ClippyClean, Security","ShipGate: MoonCi, GitPush"]}

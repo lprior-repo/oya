@@ -1,0 +1,9 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&conn"
+---
+id: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+source: 00000000-0000-0000-0000-000000000001
+target: 00000000-0000-0000-0000-000000000002
+source_port: "true"
+target_port: main

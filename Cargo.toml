@@ -3,6 +3,10 @@ name = "oya"
 version = "0.1.0"
 edition = "2021"
 
+[workspace]
+members = [".", "crates/oya-contracts"]
+resolver = "2"
+
 [dependencies]
 anyhow = "1"
 async-trait = "0.1"
@@ -14,6 +18,7 @@ futures-util = "0.3"
 opentelemetry = "0.31"
 opentelemetry-otlp = { version = "0.31", features = ["grpc-tonic"] }
 opentelemetry_sdk = { version = "0.31", features = ["rt-tokio"] }
+oya-contracts = { path = "crates/oya-contracts" }
 reqwest = { version = "0.12", features = ["json", "blocking"] }
 restate-sdk = "0.8"
 rpds = "1.2"

@@ -6,23 +6,59 @@
 
 use super::commands::run_command_outcome;
 
-const GH_REPO_VIEW_ARGS: &[&str] = &["repo", "view", "--json", "nameWithOwner"];
+const GIT_PROGRAM: &str = "git";
+const GIT_ORIGIN_REMOTE_ARGS: &[&str] = &["remote", "get-url", "origin"];
 
 pub async fn detect_repo_slug() -> anyhow::Result<Option<String>> {
-    let output = run_command_outcome("gh", GH_REPO_VIEW_ARGS, None).await?;
+    let output = run_command_outcome(GIT_PROGRAM, GIT_ORIGIN_REMOTE_ARGS, None).await?;
     if !output.success {
         return Ok(None);
     }
-    extract_repo_slug_from_gh_output(&output.stdout).map(Some)
+    extract_repo_slug_from_git_remote(&output.stdout).map(Some)
 }
 
-fn extract_repo_slug_from_gh_output(raw: &str) -> anyhow::Result<String> {
-    #[derive(Debug, serde::Deserialize)]
-    struct GhRepoView {
-        #[serde(rename = "nameWithOwner")]
-        name_with_owner: String,
+fn extract_repo_slug_from_git_remote(raw: &str) -> anyhow::Result<String> {
+    let remote = raw
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("git origin remote URL was empty"))?;
+    crate::cli::repo::parse_repo_slug_from_remote_url(remote)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extracts_repo_slug_from_https_origin() {
+        let Ok(slug) =
+            extract_repo_slug_from_git_remote("https://github.com/priorlewis43/oya.git\n")
+        else {
+            assert!(false, "https origin should parse");
+            return;
+        };
+        assert_eq!(slug, "priorlewis43/oya");
     }
 
-    let payload: GhRepoView = serde_json::from_str(raw)?;
-    crate::cli::args::parse_repo_slug(&payload.name_with_owner).map_err(anyhow::Error::msg)
+    #[test]
+    fn extracts_repo_slug_from_ssh_origin() {
+        let Ok(slug) = extract_repo_slug_from_git_remote("git@github.com:priorlewis43/oya.git\n")
+        else {
+            assert!(false, "ssh origin should parse");
+            return;
+        };
+        assert_eq!(slug, "priorlewis43/oya");
+    }
+
+    #[test]
+    fn rejects_empty_origin_output() {
+        assert!(extract_repo_slug_from_git_remote("\n").is_err());
+    }
+
+    #[test]
+    fn repo_detection_uses_only_git_origin_remote() {
+        assert_eq!(GIT_PROGRAM, "git");
+        assert_eq!(GIT_ORIGIN_REMOTE_ARGS, &["remote", "get-url", "origin"]);
+    }
 }

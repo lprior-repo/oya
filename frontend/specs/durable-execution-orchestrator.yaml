@@ -1,0 +1,808 @@
+# Durable Execution Orchestrator: Architectural Design
+
+```jsonl
+{"kind":"meta","project":"durable-execution-orchestrator","version":"1.0.0","updated":"2026-02","format":"yaml"}
+```
+
+## 1. Executive Summary
+
+This document describes the architecture for a durable execution orchestrator that fuses **Restate's event-sourcing model** with **Beam's OTP patterns**. The system provides:
+
+- **Fault-tolerant process supervision** akin to Erlang/OTP supervisors
+- **State machine-driven workflows** with crash recovery
+- **Message-driven actor isolation** with link/monitor semantics
+- **Rust-native actor model** with zero-cost abstractions
+
+## 2. Design Philosophy
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    DESIGN PHILOSOPHY                                 │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│   BEAM/OTP                    RESTATE                 RUST          │
+│   ────────                    ───────                 ─────          │
+│   Supervisors            Durable Execution        Type Safety        │
+│   ├─ One-for-One        ├─ Journaled Steps        ├─ Zero-Cost      │
+│   ├─ One-for-All       ├─ Promise-based          ├─ No Panics      │
+│   └─ Rest-for-One      └─ Event-sourced          └─ Ownership      │
+│                                                                      │
+│                              ↓ FUSION ↓                              │
+│                                                                      │
+│   ┌─────────────────────────────────────────────────────────────┐   │
+│   │  DURABLE SUPERVISION TREE                                   │   │
+│   │  • Process = State Machine + Event Journal                  │   │
+│   │  • Supervision = Restate Workflow + OTP Strategy            │   │
+│   │  • Recovery = Replay from Journal + Process Restart         │   │
+│   └─────────────────────────────────────────────────────────────┘   │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+## 3. Core Abstractions
+
+### 3.1 Process (Actor)
+
+```rust
+/// A process is the fundamental unit of execution - a stateful actor
+/// with a deterministic state machine and event-sourced persistence.
+pub trait Process<S: State>: Send {
+    /// The initial state when process starts
+    fn initial_state(&self) -> S;
+
+    /// Handle an incoming message, producing state transitions and outgoing messages
+    fn handle(&self, state: &S, message: Message) -> ProcessResult<S>;
+
+    /// Recovery: replay events to reconstruct state
+    fn recover(events: &[Event]) -> S;
+}
+
+/// ProcessResult captures the outcome of message handling
+pub struct ProcessResult<S: State> {
+    pub state: S,
+    pub effects: Vec<Effect>,
+    pub messages: Vec<OutboxMessage>,
+}
+
+pub trait State: Clone + Default + Send + Sync + 'static {}
+
+pub enum Message {
+    // Application messages
+    Application(Bytes),
+    // System signals
+    Start,
+    Stop,
+    ChildTerminated { pid: Pid, reason: ExitReason },
+    LinkedProcessTerminated { pid: Pid, reason: ExitReason },
+    MonitoredProcessTerminated { pid: Pid, reason: ExitReason },
+    // Timer events
+    Timeout { id: Uuid, expires_at: Instant },
+    // Recovery
+    RecoveryComplete { checkpoint: Checkpoint },
+}
+
+pub enum Effect {
+    // Persistence
+    Persist(Event),
+    // Spawning
+    Spawn { spec: SpawnSpec },
+    SpawnLinked { spec: SpawnSpec },
+    SpawnMonitored { spec: SpawnSpec },
+    // Communication
+    Send { to: Pid, message: Message },
+    // Process control
+    Link { target: Pid },
+    Unlink { target: Pid },
+    Monitor { target: Pid },
+    Demonitor { target: Pid },
+    // Time
+    SetTimeout { id: Uuid, duration: Duration },
+    CancelTimeout { id: Uuid },
+    // State
+    Checkpoint { state: Checkpoint },
+    Become { handler: Box<dyn Process<Self::State>> },
+}
+```
+
+### 3.2 Supervision Strategy
+
+```rust
+/// OTP-style supervision strategies adapted for durable execution
+pub enum SupervisionStrategy {
+    /// If a child process terminates, only that child restarts
+    OneForOne,
+
+    /// If a child process terminates, all siblings restart
+    OneForAll,
+
+    /// If a child process terminates, subsequent children restart in order
+    RestForOne,
+
+    /// Simple one-shot: no restart, fail fast
+    Transient,
+
+    /// Permanent: always restart
+    Permanent,
+}
+
+/// Supervisor specification
+pub struct SupervisorSpec {
+    pub strategy: SupervisionStrategy,
+    pub max_restarts: u32,
+    pub max_seconds: Duration,
+    pub children: Vec<ChildSpec>,
+}
+
+pub struct ChildSpec {
+    pub id: ChildId,
+    pub factory: Box<dyn ProcessFactory>,
+    pub restart: RestartPolicy,
+    pub shutdown: ShutdownStrategy,
+}
+
+pub enum RestartPolicy {
+    Permanent,
+    Temporary,
+    Transient { max_retries: u32 },
+}
+
+pub enum ShutdownStrategy {
+    /// Wait for graceful shutdown, then kill
+    Intimate { timeout: Duration },
+    /// Force kill after timeout
+    Force { timeout: Duration },
+    /// Wait indefinitely
+    Infinite,
+}
+```
+
+### 3.3 State Machine as Code
+
+```rust
+/// State machines are explicit, type-safe, and deterministic
+/// This pattern ensures that recovery is just replay + rehydration
+
+pub trait StateMachine<S: State, E: Event, T: Transition>: Send {
+    /// Initial state
+    fn initial() -> S;
+
+    /// Apply event to state, returning new state
+    fn apply(state: &S, event: &E) -> S;
+
+    /// Given current state, what transitions are valid?
+    fn valid_transitions(state: &S) -> Vec<T>;
+
+    /// Execute transition, producing events
+    fn execute(state: &S, transition: &T) -> Result<Vec<E>, TransitionError>;
+}
+
+/// Example: Order Processing State Machine
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum OrderState {
+    Draft,
+    Submitted,
+    PaymentPending,
+    Processing,
+    Shipped,
+    Delivered,
+    Cancelled,
+    Refunded,
+}
+
+#[derive(Clone, Debug)]
+pub enum OrderEvent {
+    Submitted { order_id: Uuid, items: Vec<Item> },
+    PaymentReceived { payment_id: Uuid },
+    PaymentFailed { reason: String },
+    Processed { processing_id: Uuid },
+    Shipped { tracking: String },
+    Delivered,
+    CancellationRequested { reason: String },
+    RefundProcessed { refund_id: Uuid },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum OrderTransition {
+    Submit,
+    ReceivePayment,
+    FailPayment,
+    Process,
+    Ship,
+    Deliver,
+    RequestCancellation,
+    ProcessRefund,
+}
+
+impl StateMachine for OrderState {
+    type Event = OrderEvent;
+    type Transition = OrderTransition;
+
+    fn initial() -> Self { OrderState::Draft }
+
+    fn apply(state: &Self, event: &Self::Event) -> Self {
+        match (state, event) {
+            (OrderState::Draft, OrderEvent::Submitted { .. }) => OrderState::Submitted,
+            (OrderState::Submitted, OrderEvent::PaymentReceived { .. }) => OrderState::Processing,
+            (OrderState::Submitted, OrderEvent::PaymentFailed { .. }) => OrderState::PaymentPending,
+            (OrderState::PaymentPending, OrderEvent::PaymentReceived { .. }) => OrderState::Processing,
+            (OrderState::Processing, OrderEvent::Processed { .. }) => OrderState::Shipped,
+            (OrderState::Shipped, OrderEvent::Delivered { .. }) => OrderState::Delivered,
+            (s, OrderEvent::CancellationRequested { .. }) if *s != OrderState::Delivered => OrderState::Cancelled,
+            (OrderState::Cancelled, OrderEvent::RefundProcessed { .. }) => OrderState::Refunded,
+            _ => state.clone(),
+        }
+    }
+
+    fn valid_transitions(state: &Self) -> Vec<Self::Transition> {
+        match state {
+            OrderState::Draft => vec![OrderTransition::Submit],
+            OrderState::Submitted => vec![OrderTransition::ReceivePayment, OrderTransition::FailPayment, OrderTransition::RequestCancellation],
+            OrderState::PaymentPending => vec![OrderTransition::ReceivePayment, OrderTransition::RequestCancellation],
+            OrderState::Processing => vec![OrderTransition::Process, OrderTransition::RequestCancellation],
+            OrderState::Shipped => vec![OrderTransition::Deliver, OrderTransition::RequestCancellation],
+            OrderState::Delivered => vec![],
+            OrderState::Cancelled => vec![OrderTransition::ProcessRefund],
+            OrderState::Refunded => vec![],
+        }
+    }
+
+    fn execute(state: &Self, transition: &Self::Transition) -> Result<Vec<Self::Event>, TransitionError> {
+        // Validate and produce events
+        let valid = Self::valid_transitions(state);
+        if !valid.contains(transition) {
+            return Err(TransitionError::InvalidTransition { state: format!("{:?}", state), transition: format!("{:?}", transition) });
+        }
+        // Return events based on transition
+        Ok(match transition {
+            OrderTransition::Submit => vec![OrderEvent::Submitted { order_id: Uuid::new_v4(), items: vec![] }],
+            _ => vec![],
+        })
+    }
+}
+```
+
+## 4. Message-Driven Recovery
+
+### 4.1 Event Journal
+
+```rust
+/// Every state change is recorded as an event in a durable journal
+/// This enables crash recovery via replay + rehydration
+
+pub struct EventJournal {
+    events: Vec<StoredEvent>,
+    checkpoint_interval: usize,
+}
+
+pub struct StoredEvent {
+    pub id: Uuid,
+    pub timestamp: DateTime<Utc>,
+    pub sequence: u64,
+    pub payload: EventPayload,
+    pub checksum: [u8; 32],
+}
+
+pub enum EventPayload {
+    StateTransition { from: String, to: String, event: String },
+    MessageReceived { sender: Pid, message: String },
+    EffectExecuted { effect: String, result: String },
+    Checkpoint { state: Bytes },
+    ChildStarted { pid: Pid, child_id: String },
+    ChildTerminated { pid: Pid, reason: String },
+}
+
+/// Recovery procedure
+pub struct RecoveryProcedure {
+    pub steps: Vec<RecoveryStep>,
+}
+
+pub enum RecoveryStep {
+    ReplayJournal { from_sequence: u64 },
+    RehydrateState { checkpoint: Checkpoint },
+    RespawnChildren { child_specs: Vec<ChildSpec> },
+    RedeliverUnacked { messages: Vec<PendingMessage> },
+    InvokeTimeout { id: Uuid },
+}
+```
+
+### 4.2 Message Delivery Guarantees
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                   MESSAGE DELIVERY MODEL                            │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│   AT-LEAST-ONCE (via Journal + Ack)                                 │
+│   ─────────────────────────────────                                 │
+│                                                                      │
+│   1. Sender writes to Outbox                                        │
+│   2. Journal records "MessageSent" event                           │
+│   3. Recipient processes message                                   │
+│   4. Recipient sends Ack                                           │
+│   5. Sender marks "MessageDelivered" in journal                     │
+│                                                                      │
+│   If crash between 2-4:                                             │
+│   → On recovery, scan outbox for undelivered                        │
+│   → Redeliver all unacked messages                                  │
+│                                                                      │
+│   ─────────────────────────────────                                 │
+│   DEAD LETTER HANDLING                                              │
+│   ─────────────────────────────────                                 │
+│   • Max retry attempts configurable per message type               │
+│   • After max retries → Dead Letter Queue (DLQ)                    │
+│   • DLQ inspector for manual intervention                           │
+│   • Optional: automatic backoff and retry                          │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+## 5. Link and Monitor (Erlang-Style)
+
+### 5.1 Process Links
+
+```rust
+/// Bidirectional death notification - like Erlang links
+/// If either process dies, the other receives Exit signal
+
+pub struct Link {
+    pub local: Pid,
+    pub remote: Pid,
+}
+
+/// When a linked process dies, this is sent to the survivor
+#[derive(Clone, Debug)]
+pub struct ExitSignal {
+    pub reason: ExitReason,
+    pub sender: Pid,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ExitReason {
+    Normal,              // Process completed normally
+    Shutdown,            // Graceful shutdown requested
+    Killed,              // Force killed by supervisor
+    Exception { error: String },
+    Linkdied { pid: Pid, reason: Box<ExitReason> },
+    // Custom application reasons
+    Custom(String),
+}
+```
+
+### 5.2 Process Monitors
+
+```rust
+/// Unidirectional death notification - like Erlang monitors
+/// Unlike links, monitors can be created multiple times for same target
+
+pub struct Monitor {
+    pub observer: Pid,
+    pub target: Pid,
+    pub ref_: MonitorRef,  // Unique reference for this monitor instance
+}
+
+/// Monitor creates a one-way notification channel
+/// Target death → 'DOWN' message sent to observer
+
+pub struct DownMessage {
+    pub monitor_ref: MonitorRef,
+    pub target: Pid,
+    pub reason: ExitReason,
+}
+
+/// Use cases:
+/// - Supervisors monitoring children (but not linked, to avoid cascade)
+/// - One process observing another without bidirectional coupling
+/// - Distributed tracing / observability
+```
+
+### 5.3 Fault Isolation
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    FAULT ISOLATION PATTERNS                          │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│   LINK (Bidirectional)           MONITOR (Unidirectional)           │
+│   ───────────────────            ────────────────────              │
+│                                                                      │
+│   ┌─────┐                       ┌─────┐                              │
+│   │  A  │◄──── link ────►──────│  B  │                              │
+│   └─────┘                       └─────┘                              │
+│                                                                      │
+│   If B dies:                         If B dies:                     │
+│   → A receives ExitSignal           → Observer receives DOWN         │
+│   → A can choose to die             → A continues unaffected        │
+│     (failfast) or handle           → Good for non-critical         │
+│     (isolation)                      monitoring                     │
+│                                                                      │
+│   ─────────────────────────────────────────────────────              │
+│   SUPERVISION TREE FAULT ISOLATION                                   │
+│   ─────────────────────────────────────────────────────              │
+│                                                                      │
+│                      ┌─────────┐                                    │
+│                      │  Root   │                                    │
+│                      │  sup    │                                    │
+│                      └────┬────┘                                    │
+│              ┌────────────┼────────────┐                           │
+│              ▼            ▼            ▼                           │
+│         ┌────────┐   ┌────────┐   ┌────────┐                       │
+│         │ Worker │   │ Worker │   │ Worker │                       │
+│         │ sup    │   │ sup    │   │ sup    │                       │
+│         └───┬────┘   └────┬────┘   └────┬────┘                    │
+│             │             │             │                           │
+│             ▼             ▼             ▼                           │
+│         ┌─────┐       ┌─────┐       ┌─────┐                         │
+│         │child │       │child │       │child │                        │
+│         └─────┘       └─────┘       └─────┘                         │
+│                                                                      │
+│   Worker Supervisor strategy: RestForOne                           │
+│   Root Supervisor strategy: OneForOne                              │
+│                                                                      │
+│   If "child" crashes:                                               │
+│   → Its siblings in same worker sup restart (RestForOne)           │
+│   → Other worker sups unaffected (Root sup, OneForOne)            │
+│   → Root sup tracks restarts, escalates if excessive               │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+## 6. Actor Model in Rust
+
+### 6.1 Mailbox Architecture
+
+```rust
+/// Actor mailbox with priority and deadline support
+
+pub struct Mailbox<M: Message> {
+    inbox: PriorityQueue<Envelope<M>>,
+    dead_letter: Vec<DeadLetter<M>>,
+    config: MailboxConfig,
+}
+
+pub struct Envelope<M> {
+    pub message: M,
+    pub sender: Option<Pid>,
+    pub priority: Priority,
+    pub deadline: Option<Instant>,
+    pub delivery: DeliveryGuarantee,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Priority {
+    System,        // Highest: Start, Stop, Exit, Down
+    High,          // Time-critical: timeouts, acks
+    Normal,        // Regular application messages
+    Background,    // Low: batch jobs, cleanup
+}
+
+pub enum DeliveryGuarantee {
+    AtLeastOnce,
+    AtMostOnce,
+    ExactlyOnce,  // Requires idempotency
+}
+```
+
+### 6.2 Process Registry
+
+```rust
+/// Global process registry - like Erlang's registry
+/// Enables named process lookup and distribution
+
+pub struct ProcessRegistry {
+    processes: Arc<RwHashMap<Pid, ProcessRef>>,
+    names: Arc<RwHashMap<String, Pid>>,
+    by_group: Arc<RwHashMap<GroupId, Vec<Pid>>>,
+}
+
+impl ProcessRegistry {
+    /// Register a process (optionally with a name)
+    pub fn register(&self, pid: Pid, name: Option<String>, group: Option<GroupId>) -> Result<(), RegistryError>;
+
+    /// Look up by PID
+    pub fn get(&self, pid: &Pid) -> Option<ProcessRef>;
+
+    /// Look up by name
+    pub fn get_by_name(&self, name: &str) -> Option<ProcessRef>;
+
+    /// Get all processes in a group
+    pub fn get_by_group(&self, group: &GroupId) -> Vec<ProcessRef>;
+
+    /// Unregister
+    pub fn unregister(&self, pid: &Pid) -> Option<ProcessRef>;
+}
+```
+
+### 6.3 Spawning and Lifecycle
+
+```rust
+/// Process spawning with full OTP semantics
+
+pub struct ProcessSpawner;
+
+impl ProcessSpawner {
+    /// Spawn a new process
+    pub fn spawn<S: State, P: Process<S>>(
+        process: P,
+        config: SpawnConfig,
+    ) -> Result<Pid, SpawnError>;
+
+    /// Spawn linked - death of either triggers exit to other
+    pub fn spawn_linked<S: State, P: Process<S>>(
+        process: P,
+        config: SpawnConfig,
+    ) -> Result<Pid, SpawnError>;
+
+    /// Spawn monitored - receive DOWN messages on death
+    pub fn spawn_monitored<S: State, P: Process<S>>(
+        process: P,
+        config: SpawnConfig,
+    ) -> Result<(Pid, MonitorRef), SpawnError>;
+
+    /// Spawn under supervisor - supervisor manages lifecycle
+    pub fn spawn_under_supervisor<S: State, P: Process<S>>(
+        process: P,
+        supervisor: Pid,
+    ) -> Result<Pid, SpawnError>;
+}
+
+pub struct SpawnConfig {
+    pub name: Option<String>,
+    pub group: Option<GroupId>,
+    pub mailbox_size: usize,
+    pub priority: Priority,
+    pub spawn_linked_with: Option<Pid>,  // Auto-link with existing process
+}
+```
+
+## 7. Integration with Restate
+
+### 7.1 Workflow-as-Supervisor
+
+```rust
+/// Restate Workflow that manages a supervision tree
+/// Provides durability for the entire process tree
+
+#[restate_sdk::workflow]
+pub struct SupervisionWorkflow;
+
+impl Workflow for SupervisionWorkflow {
+    async fn run(ctx: &WorkflowContext, input: SupervisorInput) -> Result<SupervisorOutput, WorkflowError> {
+        let supervisor = ctx.run(|| async {
+            Supervisor::new(input.spec).await
+        }).await?;
+
+        // Main supervisor loop - durable
+        loop {
+            tokio::select! {
+                // Handle child events
+                msg = ctx.awakeable::<ChildEvent>() => {
+                    let event = msg?;
+                    ctx.run(|| async {
+                        supervisor.handle_child_event(event).await
+                    }).await?;
+                }
+
+                // Handle supervisor messages
+                msg = ctx.awakeable::<SupervisorMessage>() => {
+                    let SupervisorMessage::Stop { reply_to } = msg?;
+                    ctx.resolve_promise("supervisor_stopped", supervisor.shutdown().await?);
+                    break;
+                }
+
+                // Timeout for idle supervisor cleanup
+                _ = ctx.sleep(Duration::from_secs(300)) => {
+                    if supervisor.is_idle() {
+                        break;
+                    }
+                }
+            }
+        }
+
+        Ok(SupervisorOutput { final_state: supervisor.state().await? })
+    }
+}
+```
+
+### 7.2 Process-as-VirtualObject
+
+```rust
+/// Individual process state stored in Restate VirtualObject
+/// Enables durable state + exactly-once semantics
+
+#[restate_sdk::object]
+pub struct ProcessState {
+    pub state_json: String,
+    pub events: Vec<StoredEvent>,
+    pub children: Vec<ChildInfo>,
+    pub links: Vec<Pid>,
+    pub monitors: Vec<MonitorInfo>,
+    pub outbox: Vec<PendingMessage>,
+}
+
+impl ProcessState {
+    #[shared]
+    async fn handle(&self, ctx: ObjectContext, msg: ProcessMessage) -> Result<ProcessResponse, HandlerError> {
+        match msg {
+            ProcessMessage::Apply { event } => {
+                let state = self.recover_state();
+                let new_state = self.apply_event(&state, &event);
+
+                ctx.set("state_json", serde_json::to_string(&new_state)?);
+                ctx.set("events", serde_json::to_string(&self.add_event(event))?);
+
+                Ok(ProcessResponse { new_state, effects: vec![] })
+            }
+            ProcessMessage::GetState => {
+                Ok(ProcessResponse { new_state: self.recover_state(), effects: vec![] })
+            }
+        }
+    }
+}
+```
+
+## 8. Supervision Tree Design
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    SUPERVISION TREE STRUCTURE                       │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│                          ┌─────────────┐                             │
+│                          │   Root      │                             │
+│                          │ Supervisor  │                             │
+│                          │ (Permanent) │                             │
+│                          └──────┬──────┘                             │
+│                                 │                                    │
+│        ┌────────────────────────┼────────────────────────┐          │
+│        │                        │                        │          │
+│        ▼                        ▼                        ▼          │
+│  ┌───────────┐          ┌───────────┐          ┌───────────┐        │
+│  │  Gateway  │          │  Engine   │          │  Admin    │        │
+│  │  Sup      │          │  Sup      │          │  Sup      │        │
+│  │(Permanent)│          │(Permanent)│          │(Transient)│        │
+│  └─────┬─────┘          └─────┬─────┘          └─────┬─────┘        │
+│        │                       │                       │              │
+│        ▼                       ▼                       ▼              │
+│  ┌───────────┐          ┌───────────┐          ┌───────────┐        │
+│  │HTTP Worker │          │ Executor  │          │Health     │        │
+│  │Pool(10)   │          │ Pool(20)  │          │Checker    │        │
+│  └───────────┘          └───────────┘          └───────────┘        │
+│                                                                      │
+│   RESTART STRATEGIES:                                               │
+│   ───────────────────                                              │
+│   • Root: Permanent, OneForOne, max 3/sec                          │
+│   • Gateway: Permanent, OneForAll, max 10/sec                      │
+│   • Engine: Permanent, RestForOne, max 5/sec                       │
+│   • Admin: Transient, max 1 attempt                                │
+│                                                                      │
+│   FAILURE SCENARIOS:                                                │
+│   ──────────────────                                                │
+│   1. Single HTTP Worker dies → Only that worker restarts           │
+│   2. Gateway Sup dies → All workers restart (OneForAll)            │
+│   3. Engine Executor dies → Subsequent executors restart           │
+│      (RestForOne), but gateway workers unaffected                  │
+│   4. Root dies → Entire application restarts                         │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+## 9. Error Taxonomy
+
+```rust
+/// Comprehensive error handling aligned with Restate's model
+
+pub mod errors {
+    use thiserror::Error;
+
+    /// Process-level errors
+    #[derive(Error, Debug)]
+    pub enum ProcessError {
+        #[error("Invalid state transition: {0}")]
+        InvalidTransition(String),
+
+        #[error("Process not found: {0}")]
+        NotFound(Pid),
+
+        #[error("Process already exists: {0}")]
+        AlreadyExists(Pid),
+
+        #[error("Process terminated: {0}")]
+        Terminated { pid: Pid, reason: ExitReason },
+    }
+
+    /// Supervision errors
+    #[derive(Error, Debug)]
+    pub enum SupervisorError {
+        #[error("Max restarts exceeded for child: {0}")]
+        MaxRestartsExceeded(ChildId),
+
+        #[error("Invalid child specification: {0}")]
+        InvalidChildSpec(String),
+
+        #[error("Child process panic: {0}")]
+        ChildPanic(ChildId, String),
+    }
+
+    /// Communication errors  
+    #[derive(Error, Debug)]
+    pub enum CommunicationError {
+        #[error("Message delivery failed: {0}")]
+        DeliveryFailed(String),
+
+        #[error("Timeout waiting for: {0}")]
+        Timeout(Pid),
+
+        #[error("Dead letter: {0}")]
+        DeadLetter(String),
+    }
+
+    /// Recovery errors
+    #[derive(Error, Debug)]
+    pub enum RecoveryError {
+        #[error("Journal corrupted at sequence: {0}")]
+        CorruptedJournal(u64),
+
+        #[error("Checkpoint not found")]
+        NoCheckpoint,
+
+        #[error("State migration failed: {0}")]
+        MigrationFailed(String),
+    }
+}
+```
+
+## 10. Implementation Roadmap
+
+### Phase 1: Core Process Model
+- [ ] `Process` trait with state machine
+- [ ] Basic mailbox implementation
+- [ ] Process registry
+- [ ] Spawn/despawn operations
+
+### Phase 2: Supervision
+- [ ] `Supervisor` implementation
+- [ ] All restart strategies
+- [ ] Child lifecycle management
+- [ ] Restart throttling
+
+### Phase 3: Links & Monitors
+- [ ] Bidirectional links
+- [ ] Unidirectional monitors
+- [ ] Exit signal propagation
+- [ ] DOWN message delivery
+
+### Phase 4: Durability
+- [ ] Event journal
+- [ ] Checkpointing
+- [ ] Recovery procedure
+- [ ] Redelivery of unacked messages
+
+### Phase 5: Restate Integration
+- [ ] VirtualObject for process state
+- [ ] Workflow for supervisor
+- [ ] Awaitable integration
+- [ ] Service discovery
+
+### Phase 6: Production Ready
+- [ ] Observability (tracing, metrics)
+- [ ] Distributed tracing
+- [ ] Configuration management
+- [ ] Migration tooling
+
+## 11. Appendix: Comparison with Existing Systems
+
+| Feature | Erlang/OTP | Akka | Restate | This Design |
+|---------|------------|------|---------|-------------|
+| Supervision | ✅ | ✅ | ⚠️ (via code) | ✅ |
+| State Machine | ⚠️ (manual) | ⚠️ (FSM trait) | ✅ | ✅ |
+| Event Sourcing | ⚠️ (manual) | ⚠️ (persistence) | ✅ | ✅ |
+| Links/Monitors | ✅ | ✅ | ❌ | ✅ |
+| Type Safety | ❌ | ⚠️ (Scala) | ✅ | ✅ |
+| Zero-Cost Abstractions | ❌ | ⚠️ (JVM) | ✅ | ✅ |
+| Rust Ownership | N/A | N/A | N/A | ✅ |
+| Distributed | ✅ | ✅ | ✅ | ✅ (future) |
+
+---
+
+**Status**: Design Complete  
+**Next**: Implementation planning with bead decomposition

@@ -1,0 +1,22 @@
+---
+source: tests/snapshot_serialization_tests.rs
+expression: "&node"
+---
+{
+  "id": "00000000-0000-0000-0000-00000000003b",
+  "name": "Send Message",
+  "category": "durable",
+  "icon": "send",
+  "x": 190.0,
+  "y": 200.0,
+  "last_output": null,
+  "selected": false,
+  "executing": false,
+  "skipped": false,
+  "node_type": "send-message",
+  "description": "Send message to queue",
+  "config": {
+    "target": "notification-queue",
+    "type": "send-message"
+  }
+}
