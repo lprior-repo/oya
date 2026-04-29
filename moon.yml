@@ -37,3 +37,18 @@ tasks:
       runInCI: false
       runFromWorkspaceRoot: true
       mergeArgs: "append"
+
+  mutants-quick:
+    script: "mkdir -p target && git diff --unified=0 main...HEAD > target/mutants-quick.diff && cargo mutants --in-diff target/mutants-quick.diff --baseline run"
+    description: "Opt-in mutation gate for changed Rust code only"
+    toolchains:
+      - rust
+    inputs:
+      - "src/**/*.rs"
+      - ".cargo/mutants.toml"
+      - "/Cargo.lock"
+    options:
+      cache: false
+      runInCI: false
+      runFromWorkspaceRoot: true
+      mergeArgs: "append"
