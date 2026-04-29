@@ -6,6 +6,9 @@
 use thiserror::Error;
 use tokio::process::Command;
 
+const BRANCH_PREFIX: &str = "oya/";
+const MAX_BRANCH_NAME_LENGTH: usize = 96;
+
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub(crate) enum WorkspaceOwnershipError {
     #[error("working_tree_invalid: run '{run_id}' cannot start because workspace has {pending_changes} unowned pending change(s)")]
@@ -56,6 +59,51 @@ pub(crate) fn ensure_workspace_owned_from_status(
     }
 }
 
+pub(crate) fn branch_name_from_ids(bead_id: &str, run_id: &str) -> String {
+    let suffix =
+        format!("{}-{}", sanitize_branch_component(bead_id), sanitize_branch_component(run_id));
+    format!("{BRANCH_PREFIX}{}", bound_branch_suffix(&suffix))
+}
+
+fn sanitize_branch_component(value: &str) -> String {
+    let sanitized = value.chars().map(safe_branch_char).collect::<String>();
+    let collapsed = collapse_dashes(&sanitized);
+    let trimmed = collapsed.trim_matches('-');
+    if trimmed.is_empty() {
+        "unknown".to_owned()
+    } else {
+        trimmed.to_owned()
+    }
+}
+
+fn safe_branch_char(character: char) -> char {
+    if character.is_ascii_alphanumeric() {
+        character.to_ascii_lowercase()
+    } else if character == '_' {
+        character
+    } else {
+        '-'
+    }
+}
+
+fn collapse_dashes(value: &str) -> String {
+    value.chars().fold(String::new(), |mut output, character| {
+        if character != '-' || !output.ends_with('-') {
+            output.push(character);
+        }
+        output
+    })
+}
+
+fn bound_branch_suffix(suffix: &str) -> String {
+    let max_suffix_len = MAX_BRANCH_NAME_LENGTH.saturating_sub(BRANCH_PREFIX.len());
+    if suffix.len() <= max_suffix_len {
+        suffix.to_owned()
+    } else {
+        suffix.chars().take(max_suffix_len).collect::<String>().trim_matches('-').to_owned()
+    }
+}
+
 fn count_pending_changes(status_stdout: &str) -> usize {
     status_stdout.lines().filter(|line| !line.trim().is_empty()).count()
 }
@@ -101,6 +149,45 @@ mod tests {
                 pending_changes: 1,
             })
         );
+    }
+
+    #[test]
+    fn branch_name_is_valid_bounded_and_deterministic() {
+        let first = branch_name_from_ids("oya-ii7", "run-oya-ii7");
+        let second = branch_name_from_ids("oya-ii7", "run-oya-ii7");
+
+        assert_eq!(first, second);
+        assert_eq!(first, "oya/oya-ii7-run-oya-ii7");
+        assert!(first.len() <= 96);
+        assert!(is_valid_branch_name(&first));
+    }
+
+    #[test]
+    fn branch_name_sanitizes_and_bounds_untrusted_ids() {
+        let branch = branch_name_from_ids(
+            "../Feature ID With Spaces.lock",
+            "run@{bad}///with spaces and VERY VERY VERY VERY VERY VERY LONG suffix",
+        );
+
+        assert!(branch.starts_with("oya/"));
+        assert!(branch.len() <= 96);
+        assert!(is_valid_branch_name(&branch));
+        assert!(!branch.contains(".."));
+        assert!(!branch.contains("@{"));
+        assert!(!branch.ends_with(".lock"));
+    }
+
+    fn is_valid_branch_name(branch: &str) -> bool {
+        !branch.contains("..")
+            && !branch.contains("@{")
+            && !branch.ends_with('/')
+            && !branch.ends_with('.')
+            && !branch.ends_with(".lock")
+            && branch.chars().all(|character| {
+                character.is_ascii_lowercase()
+                    || character.is_ascii_digit()
+                    || matches!(character, '-' | '_' | '/' | '.')
+            })
     }
 
     #[test]

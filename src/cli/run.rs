@@ -14,7 +14,7 @@ use super::agent::{
 };
 use super::args::RunArgs;
 use super::verify::{persist_run_verification_gate, RunVerificationResult};
-use super::workspace::ensure_clean_workspace_for_run;
+use super::workspace::{branch_name_from_ids, ensure_clean_workspace_for_run};
 use crate::lifecycle::state::StateDb;
 use crate::lifecycle::types::{
     BeadId, EvidenceEnvelope, EvidenceEnvelopeParts, EvidenceKind, EvidenceMetadata,
@@ -492,6 +492,10 @@ fn agent_request_metadata(model: &str, prompt_record: &EvidenceEnvelope) -> Evid
         ("status".to_owned(), "requested".to_owned()),
         ("workspace_owner_bead_id".to_owned(), prompt_record.bead_id.as_str().to_owned()),
         ("workspace_owner_run_id".to_owned(), prompt_record.run_id.as_str().to_owned()),
+        (
+            "workspace_branch_name".to_owned(),
+            branch_name_from_ids(prompt_record.bead_id.as_str(), prompt_record.run_id.as_str()),
+        ),
         ("workspace_status".to_owned(), "clean_at_agent_request".to_owned()),
     ])
 }
@@ -583,6 +587,10 @@ mod tests {
         assert_eq!(
             evidence[2].metadata.get("workspace_owner_run_id"),
             Some(&"run-demo".to_owned())
+        );
+        assert_eq!(
+            evidence[2].metadata.get("workspace_branch_name"),
+            Some(&"oya/demo-run-demo".to_owned())
         );
         assert_eq!(
             evidence[2].metadata.get("workspace_status"),
