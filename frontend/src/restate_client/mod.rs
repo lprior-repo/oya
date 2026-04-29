@@ -7,10 +7,12 @@
 //! - SQL Query: localhost:9070/query (POST with SQL body)
 
 pub mod client;
+pub mod lifecycle;
 pub mod queries;
 pub mod types;
 
 pub use client::{ClientError, RestateClient, RestateClientConfig};
+pub use lifecycle::{LifecycleStatusClient, LifecycleStatusClientConfig, LifecycleStatusError};
 pub use queries::SqlQueries;
 pub use types::*;
 pub use types::{InvocationAction, InvocationActionResponse};
