@@ -8,8 +8,8 @@ use tokio::process::Command;
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub(crate) enum WorkspaceOwnershipError {
-    #[error("unowned_dirty_workspace: run '{run_id}' cannot start because workspace has {pending_changes} pending change(s)")]
-    Dirty { run_id: String, pending_changes: usize },
+    #[error("working_tree_invalid: run '{run_id}' cannot start because workspace has {pending_changes} unowned pending change(s)")]
+    WorkingTreeInvalid { run_id: String, pending_changes: usize },
 
     #[error("workspace_status_unavailable: failed to run git status: {message}")]
     GitUnavailable { message: String },
@@ -49,7 +49,10 @@ pub(crate) fn ensure_workspace_owned_from_status(
     if pending_changes == 0 {
         Ok(())
     } else {
-        Err(WorkspaceOwnershipError::Dirty { run_id: run_id.to_owned(), pending_changes })
+        Err(WorkspaceOwnershipError::WorkingTreeInvalid {
+            run_id: run_id.to_owned(),
+            pending_changes,
+        })
     }
 }
 
@@ -79,12 +82,25 @@ mod tests {
 
         assert_eq!(
             result,
-            Err(WorkspaceOwnershipError::Dirty {
+            Err(WorkspaceOwnershipError::WorkingTreeInvalid {
                 run_id: "run-demo".to_owned(),
                 pending_changes: 2,
             })
         );
         assert!(!result.err().unwrap().to_string().contains(".env"));
+    }
+
+    #[test]
+    fn git_dirty_block_returns_working_tree_invalid() {
+        let result = ensure_workspace_owned_from_status("run-demo", "?? generated.txt\n");
+
+        assert_eq!(
+            result,
+            Err(WorkspaceOwnershipError::WorkingTreeInvalid {
+                run_id: "run-demo".to_owned(),
+                pending_changes: 1,
+            })
+        );
     }
 
     #[test]
