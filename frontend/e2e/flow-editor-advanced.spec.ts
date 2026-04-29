@@ -4,6 +4,7 @@ import {
   addNodeFromSidebar,
   attachPageErrorSink,
   ensureStableShell,
+  flowNode,
   nodeCount,
   openCanvasContextMenu,
   waitForEditorShell,
@@ -49,7 +50,7 @@ test("adds multiple nodes and deletes one selected node", async ({ page }) => {
   const beforeDelete = await nodeCount(page);
   expect(beforeDelete).toBeGreaterThanOrEqual(3);
 
-  const firstNode = page.locator("div[data-node-id]").first();
+  const firstNode = flowNode(page).first();
   await firstNode.click();
 
   const selectedPanel = page.locator("aside").filter({ hasText: "Node Name" }).first();

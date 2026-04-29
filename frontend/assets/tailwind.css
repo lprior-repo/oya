@@ -1101,6 +1101,9 @@
   .max-w-\[200px\] {
     max-width: 200px;
   }
+  .max-w-\[360px\] {
+    max-width: 360px;
+  }
   .max-w-\[calc\(100\%-2rem\)\] {
     max-width: calc(100% - 2rem);
   }
@@ -1145,6 +1148,9 @@
   }
   .min-w-\[120px\] {
     min-width: 120px;
+  }
+  .min-w-\[360px\] {
+    min-width: 360px;
   }
   .min-w-\[var\(--radix-select-trigger-width\)\] {
     min-width: var(--radix-select-trigger-width);

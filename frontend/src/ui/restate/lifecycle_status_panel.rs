@@ -138,7 +138,7 @@ fn render_lifecycle_result(
     match resource.read().as_ref() {
         Some(Ok(snapshot)) => render_lifecycle_snapshot(snapshot, selected_run),
         Some(Err(error)) => rsx! {
-            div { class: "rounded border border-red-200 bg-red-50 px-2 py-2 text-[11px] text-red-700", "Lifecycle status request failed: {error}" }
+            div { class: "break-words rounded border border-red-200 bg-red-50 px-2 py-2 text-[11px] text-red-700", "Lifecycle status request failed: {error}" }
         },
         None => rsx! {
             div { class: "text-[11px] text-slate-400 text-center py-4", "Loading lifecycle status..." }

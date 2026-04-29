@@ -164,6 +164,7 @@ pub fn FlowNodeComponent(
 
             div {
                 class: "group relative w-[220px] rounded-xl border bg-gradient-to-b from-white to-slate-50/70 transition-all duration-150 cursor-grab active:cursor-grabbing {category_border} {exec_border} {selected_classes} {running_glow}",
+                "data-testid": "flow-node",
                 onmousedown: move |e| {
                     on_mouse_down.call(e);
                 },

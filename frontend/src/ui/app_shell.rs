@@ -213,6 +213,7 @@ pub fn AppShell() -> Element {
             ".canvas-grid-animated {{ animation: canvas-shimmer 24s linear infinite; }}"
             "@media (prefers-reduced-motion: reduce) {{ .edge-animated {{ animation: none !important; }} }}"
             "@media (prefers-reduced-motion: reduce) {{ .canvas-grid-animated {{ animation: none !important; }} }}"
+            "@media (prefers-reduced-motion: reduce) {{ .animate-slide-in-right {{ animation: none !important; }} }}"
         }
 
         div { class: "relative flex h-screen w-screen flex-col overflow-hidden bg-[#f2f7fa] text-slate-900 [font-family:'Geist',_'Manrope',sans-serif] select-none",
@@ -340,7 +341,7 @@ pub fn AppShell() -> Element {
                 }
             }
 
-            div { class: "flex flex-1 overflow-hidden",
+            div { class: "flex min-w-0 flex-1 overflow-hidden",
                 NodeSidebar {
                     search: ReadSignal::from(use_memo(move || sidebar.search().read().as_str().to_string())),
                     on_search_change: move |value| sidebar.set_search(value),
@@ -356,7 +357,7 @@ pub fn AppShell() -> Element {
                 }
 
                 main {
-                    class: "relative flex-1 overflow-hidden bg-gradient-to-br from-slate-50 via-cyan-50/40 to-sky-100/40 {canvas.cursor_class()}",
+                    class: "relative min-w-[360px] flex-1 overflow-hidden bg-gradient-to-br from-slate-50 via-cyan-50/40 to-sky-100/40 {canvas.cursor_class()}",
                     tabindex: "0",
                     onmouseenter: move |evt| {
                         crate::hooks::use_canvas_mouse::handle_canvas_mouseenter_event(&evt, canvas);

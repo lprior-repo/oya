@@ -4,6 +4,7 @@ import {
   addNodeFromSidebar,
   attachPageErrorSink,
   ensureStableShell,
+  flowNode,
   nodeCount,
   openCanvasContextMenu,
   waitForEditorShell,
@@ -20,7 +21,7 @@ const seeded = (seed: number): (() => number) => {
 };
 
 async function dragFirstNode(page: Page, dx: number, dy: number): Promise<void> {
-  const first = page.locator("div[data-node-id]").first();
+  const first = flowNode(page).first();
   if ((await first.count()) === 0) {
     return;
   }
@@ -50,7 +51,7 @@ test("adversarial seeded interaction loop preserves invariants", async ({ page }
     if (pick === 0) {
       await runPromise(addNodeFromSidebar(page));
     } else if (pick === 1) {
-      const first = page.locator("div[data-node-id]").first();
+      const first = flowNode(page).first();
       if ((await first.count()) > 0) {
         await first.evaluate((element: HTMLElement) => element.click());
       }

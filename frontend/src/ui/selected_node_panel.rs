@@ -48,7 +48,7 @@ pub fn SelectedNodePanel(
             };
 
             return rsx! {
-                aside { class: "animate-slide-in-right z-30 flex w-[320px] shrink-0 flex-col border-l border-slate-200 bg-white/95",
+                aside { class: "animate-slide-in-right z-40 flex w-[320px] shrink-0 flex-col border-l border-slate-200 bg-white/95",
                     div { class: "flex items-center justify-between border-b border-slate-200 px-4 py-3",
                         div { class: "flex items-center gap-2.5",
                             div { class: "flex h-7 w-7 items-center justify-center rounded-md border {badge_classes}",

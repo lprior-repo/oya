@@ -19,7 +19,7 @@ export const addNodeFromSidebar = (
   page: Page,
   label = "HTTP Trigger",
 ): Effect<Locator> =>
-  tap(succeed(page.locator("div[data-node-id]").last()), async (node) => {
+  tap(succeed(page.getByTestId("flow-node").last()), async (node) => {
     const button = page.locator("aside button").filter({ hasText: label }).first();
     await expect(button).toBeVisible();
     await button.evaluate((element: HTMLElement) => element.click());
@@ -30,16 +30,23 @@ export const nodeCount = async (page: Page): Promise<number> => {
   return page.locator("div[data-node-id]").count();
 };
 
+export const flowNode = (page: Page): Locator => page.getByTestId("flow-node");
+
 export const openCanvasContextMenu = async (page: Page): Promise<void> => {
-  const rect = await page.locator("main").boundingBox();
+  const canvas = page.locator("main");
+  const rect = await canvas.boundingBox();
   expect(rect).not.toBeNull();
   if (!rect) {
     return;
   }
 
-  const x = rect.x + Math.min(360, rect.width - 10);
-  const y = rect.y + Math.min(280, rect.height - 10);
-  await page.mouse.click(x, y, { button: "right" });
+  await canvas.click({
+    button: "right",
+    position: {
+      x: Math.max(20, Math.floor(rect.width * 0.5)),
+      y: Math.max(20, Math.floor(rect.height * 0.5)),
+    },
+  });
   await expect(page.getByRole("button", { name: "Add Node" })).toBeVisible();
 };
 

@@ -28,7 +28,7 @@ pub fn RightPanel(
     let history_signal = use_memo(move || workflow.workflow().read().history.clone());
 
     rsx! {
-        div { class: "flex flex-col shrink-0 border-l border-slate-200",
+        div { class: "flex h-full w-[360px] max-w-[360px] min-w-0 shrink-0 flex-col overflow-x-hidden overflow-y-auto border-l border-slate-200",
             ValidationPanel {
                 validation_result: ReadSignal::from(validation_result),
                 collapsed: validation_collapsed,
