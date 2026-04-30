@@ -1,12 +1,7 @@
 {"kind":"meta","version":"1.0","updated":"2026-02","project":"oya"}
 {"kind":"mandate","id":"moon-only","text":"MANDATORY: Use ONLY moon for ALL build/test/lint tasks. NEVER use cargo directly. Violation is a workflow failure."}
-{"kind":"mandate","id":"codanna-only-discovery","text":"MANDATORY: Use ONLY Codanna MCP for code discovery (symbols, callers, calls, impact, dependency tracing)."}
-{"kind":"rule","id":"no-glob-read-grep-explore","text":"FORBIDDEN for exploration: glob/read/grep/find/rg. Use only after Codanna identifies exact path/symbol, or for non-indexed artifacts."}
-{"kind":"rule","id":"exploration-ladder","text":"Use this order: codanna_search_symbols -> codanna_find_symbol -> codanna_analyze_impact -> targeted read."}
 {"kind":"rule","id":"cheap-defaults","text":"Default limits: search limit <= 5, impact depth <= 2, single-pass batched queries, no repeated re-query of same symbol."}
 {"kind":"rule","id":"response-budget","text":"Default response budget: <= 8 lines, no redundant recap, no chain-of-thought, include only decision/files/next-action."}
-{"kind":"policy","id":"non-codanna-explore-failure","text":"Exploration with glob/read/grep before a Codanna attempt is a workflow failure unless user explicitly requests it."}
-{"kind":"cmd","tool":"codanna_mcp","list":["codanna_search_symbols","codanna_find_symbol","codanna_get_calls","codanna_find_callers","codanna_analyze_impact","codanna_semantic_search_with_context","codanna_get_index_info"]}
 {"kind":"guide","id":"git-only-vcs","text":"Use Git/GitHub for version-control, branch, and PR flow. Do not require alternate version-control tools for active Oya workflows."}
 {"kind":"skill","load":"/planner","when":"first","purpose":"deterministic bead decomposition"}
 {"kind":"skill","load":"/functional-rust-generator","when":"coding","purpose":"zero-panic rust"}
