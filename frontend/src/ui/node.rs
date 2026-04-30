@@ -22,6 +22,24 @@ pub enum FlowNodeEvent {
     InlineClose,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum FlowNodeSelection {
+    Selected,
+    Unselected,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum FlowNodeInlineState {
+    Open,
+    Closed,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ExecutionDataVisibility {
+    Visible,
+    Hidden,
+}
+
 #[derive(Clone, PartialEq)]
 struct FlowNodePresentation {
     category_border: &'static str,
@@ -32,7 +50,7 @@ struct FlowNodePresentation {
     running_glow: &'static str,
     z_index: i32,
     preview: Option<String>,
-    has_execution_data: bool,
+    execution_data_visibility: ExecutionDataVisibility,
 }
 
 // ---------------------------------------------------------------------------
@@ -144,8 +162,14 @@ const fn category_accent_bar_class(category: NodeCategory) -> &'static str {
 }
 
 #[must_use]
-fn flow_node_presentation(node: &Node, selected: bool, inline_open: bool) -> FlowNodePresentation {
+fn flow_node_presentation(
+    node: &Node,
+    selected: FlowNodeSelection,
+    inline_state: FlowNodeInlineState,
+) -> FlowNodePresentation {
     let state = node.execution_state;
+    let has_execution_data = node.last_output.is_some()
+        || matches!(state, ExecutionState::Completed | ExecutionState::Failed);
     FlowNodePresentation {
         category_border: category_border_class(node.category),
         category_icon_bg: category_icon_bg_class(node.category),
@@ -153,19 +177,34 @@ fn flow_node_presentation(node: &Node, selected: bool, inline_open: bool) -> Flo
         exec_border: node_border_class(state),
         selected_classes: selected_class(selected),
         running_glow: running_glow_class(state),
-        z_index: if selected || inline_open { 10 } else { 1 },
+        z_index: if matches!(selected, FlowNodeSelection::Selected)
+            || matches!(inline_state, FlowNodeInlineState::Open)
+        {
+            10
+        } else {
+            1
+        },
         preview: output_preview(node.last_output.as_ref(), 3),
-        has_execution_data: node.last_output.is_some()
-            || matches!(state, ExecutionState::Completed | ExecutionState::Failed),
+        execution_data_visibility: execution_data_visibility(has_execution_data),
     }
 }
 
 #[must_use]
-const fn selected_class(selected: bool) -> &'static str {
-    if selected {
-        "ring-2 ring-cyan-500/55 border-cyan-500/40 shadow-xl shadow-cyan-500/20"
+const fn selected_class(selected: FlowNodeSelection) -> &'static str {
+    match selected {
+        FlowNodeSelection::Selected => {
+            "ring-2 ring-cyan-500/55 border-cyan-500/40 shadow-xl shadow-cyan-500/20"
+        }
+        FlowNodeSelection::Unselected => "hover:border-slate-300",
+    }
+}
+
+#[must_use]
+const fn execution_data_visibility(visible: bool) -> ExecutionDataVisibility {
+    if visible {
+        ExecutionDataVisibility::Visible
     } else {
-        "hover:border-slate-300"
+        ExecutionDataVisibility::Hidden
     }
 }
 
@@ -185,19 +224,19 @@ const fn running_glow_class(state: ExecutionState) -> &'static str {
 #[component]
 pub fn FlowNodeComponent(
     node: Node,
-    selected: bool,
-    inline_open: bool,
+    selected: FlowNodeSelection,
+    inline_state: FlowNodeInlineState,
     on_event: EventHandler<FlowNodeEvent>,
 ) -> Element {
-    let presentation = flow_node_presentation(&node, selected, inline_open);
+    let presentation = flow_node_presentation(&node, selected, inline_state);
 
     rsx! {
         div {
             "data-node-id": "{node.id}",
             class: "absolute select-none",
             style: "left: {node.x}px; top: {node.y}px; z-index: {presentation.z_index};",
-            FlowNodeCard { node: node.clone(), inline_open, presentation: presentation.clone(), on_event }
-            FlowNodeInlinePanel { node: node.clone(), inline_open, on_event }
+            FlowNodeCard { node: node.clone(), inline_state, presentation: presentation.clone(), on_event }
+            FlowNodeInlinePanel { node: node.clone(), inline_state, on_event }
         }
     }
 }
@@ -205,7 +244,7 @@ pub fn FlowNodeComponent(
 #[component]
 fn FlowNodeCard(
     node: Node,
-    inline_open: bool,
+    inline_state: FlowNodeInlineState,
     presentation: FlowNodePresentation,
     on_event: EventHandler<FlowNodeEvent>,
 ) -> Element {
@@ -219,11 +258,11 @@ fn FlowNodeCard(
             FlowNodeHandle { side: "target", on_event }
             FlowNodeTopRule {}
             FlowNodeHeader { node: node.clone(), presentation: presentation.clone() }
-            FlowNodeMeta { category: node.category, inline_open }
+            FlowNodeMeta { category: node.category, inline_state }
             FlowNodeExecutionHints { node }
             FlowNodeOutputPreview { preview: presentation.preview.clone() }
             div { class: "h-[2px] rounded-b-lg {presentation.category_accent_bar}" }
-            FlowNodeInspectHint { visible: presentation.has_execution_data }
+            FlowNodeInspectHint { visibility: presentation.execution_data_visibility }
             FlowNodeHandle { side: "source", on_event }
         }
     }
@@ -302,11 +341,11 @@ fn render_static_status_badge(state: ExecutionState) -> Element {
 }
 
 #[component]
-fn FlowNodeMeta(category: NodeCategory, inline_open: bool) -> Element {
+fn FlowNodeMeta(category: NodeCategory, inline_state: FlowNodeInlineState) -> Element {
     rsx! {
         div { class: "-mt-1 flex items-center gap-1.5 px-3.5 pb-2 text-[9px] uppercase tracking-wide text-slate-400",
             span { class: "rounded bg-white px-1.5 py-px", "{category}" }
-            if inline_open { span { class: "rounded border border-cyan-200 bg-cyan-50 px-1.5 py-px text-cyan-700", "Editing" } }
+            if matches!(inline_state, FlowNodeInlineState::Open) { span { class: "rounded border border-cyan-200 bg-cyan-50 px-1.5 py-px text-cyan-700", "Editing" } }
         }
     }
 }
@@ -341,9 +380,9 @@ fn FlowNodeOutputPreview(preview: Option<String>) -> Element {
 }
 
 #[component]
-fn FlowNodeInspectHint(visible: bool) -> Element {
+fn FlowNodeInspectHint(visibility: ExecutionDataVisibility) -> Element {
     rsx! {
-        if visible {
+        if matches!(visibility, ExecutionDataVisibility::Visible) {
             div { class: "absolute bottom-1 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-150", title: "Click to inspect execution data", {icon_by_name("info", "h-2.5 w-2.5 text-slate-400".to_string())} }
         }
     }
@@ -352,11 +391,11 @@ fn FlowNodeInspectHint(visible: bool) -> Element {
 #[component]
 fn FlowNodeInlinePanel(
     node: Node,
-    inline_open: bool,
+    inline_state: FlowNodeInlineState,
     on_event: EventHandler<FlowNodeEvent>,
 ) -> Element {
     rsx! {
-        if inline_open {
+        if matches!(inline_state, FlowNodeInlineState::Open) {
             div {
                 class: "mt-1",
                 onclick: move |e| e.stop_propagation(),

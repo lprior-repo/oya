@@ -14,7 +14,8 @@ use crate::ui::constants::{
     ZOOM_DELTA,
 };
 use crate::ui::{
-    FlowEdges, FlowMinimap, FlowNodeComponent, FlowNodeEvent, FlowPosition, ParallelGroupOverlay,
+    FlowEdges, FlowMinimap, FlowNodeComponent, FlowNodeEvent, FlowNodeInlineState,
+    FlowNodeSelection, FlowPosition, ParallelGroupOverlay,
 };
 use dioxus::html::input_data::MouseButton;
 use dioxus::prelude::*;
@@ -32,6 +33,29 @@ pub struct CanvasPanelControls {
     pub show_inspector: Signal<bool>,
 }
 
+#[derive(Clone, Copy, PartialEq)]
+struct CanvasWorkspace {
+    workflow: WorkflowState,
+    selection: SelectionState,
+    canvas: CanvasInteraction,
+    controls: CanvasPanelControls,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+struct CanvasViewportLayer {
+    running_node_ids: Memo<Vec<NodeId>>,
+    zoom: Memo<f32>,
+    vx: f32,
+    vy: f32,
+    vz: f32,
+}
+
+#[derive(Clone, Copy)]
+struct NodeEventContext {
+    node_id: NodeId,
+    workspace: CanvasWorkspace,
+}
+
 #[component]
 pub fn CanvasArea(
     workflow: WorkflowState,
@@ -47,23 +71,18 @@ pub fn CanvasArea(
     let vz = viewport.read().zoom;
     let running_node_ids = running_nodes(nodes);
     let zoom = use_memo(move || viewport.read().zoom);
+    let workspace = CanvasWorkspace { workflow, selection, canvas, controls };
+    let layer = CanvasViewportLayer { running_node_ids, zoom, vx, vy, vz };
 
     rsx! {
-        CanvasGrid { vx, vy, vz }
+        CanvasGrid { vx: layer.vx, vy: layer.vy, vz: layer.vz }
         CanvasContentLayer {
-            workflow,
-            selection,
-            canvas,
+            workspace,
             preview,
-            controls,
-            running_node_ids,
-            zoom,
-            vx,
-            vy,
-            vz,
+            layer,
         }
-        MarqueeSelection { canvas }
-        CanvasMiniMapControls { workflow, selection }
+        MarqueeSelection { canvas: workspace.canvas }
+        CanvasMiniMapControls { workflow: workspace.workflow, selection: workspace.selection }
     }
 }
 
@@ -83,28 +102,21 @@ fn CanvasGrid(vx: f32, vy: f32, vz: f32) -> Element {
 
 #[component]
 fn CanvasContentLayer(
-    workflow: WorkflowState,
-    selection: SelectionState,
-    canvas: CanvasInteraction,
+    workspace: CanvasWorkspace,
     preview: CanvasPreviewLayer,
-    controls: CanvasPanelControls,
-    running_node_ids: Memo<Vec<NodeId>>,
-    zoom: Memo<f32>,
-    vx: f32,
-    vy: f32,
-    vz: f32,
+    layer: CanvasViewportLayer,
 ) -> Element {
-    let nodes = workflow.nodes();
-    let connections = workflow.connections();
+    let nodes = workspace.workflow.nodes();
+    let connections = workspace.workflow.connections();
     rsx! {
         div {
             class: "absolute origin-top-left",
-            style: "transform: translate({vx}px, {vy}px) scale({vz}); will-change: transform;",
-            FlowEdges { edges: connections, nodes, temp_edge: preview.temp_edge, running_node_ids, zoom }
+            style: "transform: translate({layer.vx}px, {layer.vy}px) scale({layer.vz}); will-change: transform;",
+            FlowEdges { edges: connections, nodes, temp_edge: preview.temp_edge, running_node_ids: layer.running_node_ids, zoom: layer.zoom }
             ParallelGroupOverlay { nodes, connections }
             PreviewEdges { edges: preview.preview_edges }
             PreviewNodes { nodes: preview.preview_nodes }
-            NodeLayer { workflow, selection, canvas, controls }
+            NodeLayer { workspace }
         }
     }
 }
@@ -145,36 +157,42 @@ fn PreviewNodes(nodes: Memo<Vec<(String, String, f32, f32)>>) -> Element {
 }
 
 #[component]
-fn NodeLayer(
-    workflow: WorkflowState,
-    selection: SelectionState,
-    canvas: CanvasInteraction,
-    controls: CanvasPanelControls,
-) -> Element {
-    let nodes = workflow.nodes();
+fn NodeLayer(workspace: CanvasWorkspace) -> Element {
+    let nodes = workspace.workflow.nodes();
     rsx! {
         for node in nodes.read().iter().cloned() {
-            CanvasNode { key: "{node.id}", node, workflow, selection, canvas, controls }
+            CanvasNode { key: "{node.id}", node, workspace }
         }
     }
 }
 
 #[component]
-fn CanvasNode(
-    node: Node,
-    workflow: WorkflowState,
-    selection: SelectionState,
-    canvas: CanvasInteraction,
-    controls: CanvasPanelControls,
-) -> Element {
+fn CanvasNode(node: Node, workspace: CanvasWorkspace) -> Element {
     let node_id = node.id;
-    let selected = selection.is_selected(node_id);
-    let inline_open = controls.panels.is_inline_panel_open(node_id);
+    let selected = flow_node_selection(workspace.selection.is_selected(node_id));
+    let inline_state =
+        flow_node_inline_state(workspace.controls.panels.is_inline_panel_open(node_id));
     let on_event = EventHandler::new(move |event| {
-        handle_node_event(event, node_id, workflow, selection, canvas, controls);
+        handle_node_event(event, NodeEventContext { node_id, workspace });
     });
 
-    rsx! { FlowNodeComponent { node, selected, inline_open, on_event } }
+    rsx! { FlowNodeComponent { node, selected, inline_state, on_event } }
+}
+
+const fn flow_node_selection(selected: bool) -> FlowNodeSelection {
+    if selected {
+        FlowNodeSelection::Selected
+    } else {
+        FlowNodeSelection::Unselected
+    }
+}
+
+const fn flow_node_inline_state(open: bool) -> FlowNodeInlineState {
+    if open {
+        FlowNodeInlineState::Open
+    } else {
+        FlowNodeInlineState::Closed
+    }
 }
 
 #[component]
@@ -232,31 +250,35 @@ fn running_nodes(nodes: ReadSignal<Vec<Node>>) -> Memo<Vec<NodeId>> {
     })
 }
 
-fn handle_node_event(
-    event: FlowNodeEvent,
-    node_id: NodeId,
-    workflow: WorkflowState,
-    selection: SelectionState,
-    canvas: CanvasInteraction,
-    controls: CanvasPanelControls,
-) {
+fn handle_node_event(event: FlowNodeEvent, context: NodeEventContext) {
+    let node_id = context.node_id;
+    let workspace = context.workspace;
     match event {
         FlowNodeEvent::NodeMouseDown(evt) => {
-            handle_node_mouse_down(&evt, node_id, selection, canvas)
+            handle_node_mouse_down(&evt, node_id, workspace.selection, workspace.canvas)
         }
-        FlowNodeEvent::NodeClick(_) => select_node(node_id, selection, controls),
-        FlowNodeEvent::NodeDoubleClick(_) => controls.panels.toggle_inline_panel(node_id),
+        FlowNodeEvent::NodeClick(_) => {
+            select_node(node_id, workspace.selection, workspace.controls)
+        }
+        FlowNodeEvent::NodeDoubleClick(_) => workspace.controls.panels.toggle_inline_panel(node_id),
         FlowNodeEvent::HandleMouseDown { event, side } => {
-            handle_port_mouse_down(&event, side, node_id, workflow, selection, canvas);
+            handle_port_mouse_down(
+                &event,
+                side,
+                node_id,
+                workspace.workflow,
+                workspace.selection,
+                workspace.canvas,
+            );
         }
         FlowNodeEvent::HandleMouseEnter(side) => {
-            canvas.set_hovered_handle(Some((node_id, side.to_string())));
+            workspace.canvas.set_hovered_handle(Some((node_id, side.to_string())));
         }
-        FlowNodeEvent::HandleMouseLeave => canvas.set_hovered_handle(None),
+        FlowNodeEvent::HandleMouseLeave => workspace.canvas.set_hovered_handle(None),
         FlowNodeEvent::InlineChange(new_config) => {
-            update_node_config(workflow, node_id, &new_config)
+            update_node_config(workspace.workflow, node_id, &new_config)
         }
-        FlowNodeEvent::InlineClose => controls.panels.close_inline_panel(),
+        FlowNodeEvent::InlineClose => workspace.controls.panels.close_inline_panel(),
     }
 }
 

@@ -8,6 +8,7 @@ import {
   flowNode,
   nodeCount,
   openCanvasContextMenu,
+  recoverActionableFlowNode,
   waitForEditorShell,
 } from "./flow-helpers";
 
@@ -25,7 +26,7 @@ async function dragActionableNode(page: Page, dx: number, dy: number): Promise<v
   if ((await flowNode(page).count()) === 0) {
     return;
   }
-  const node = await actionableFlowNode(page);
+  const node = await recoverActionableFlowNode(page);
   const box = await node.boundingBox();
   if (!box) {
     return;
@@ -53,7 +54,7 @@ test("adversarial seeded interaction loop preserves invariants", async ({ page }
       await runPromise(addNodeFromSidebar(page));
     } else if (pick === 1) {
       if ((await flowNode(page).count()) > 0) {
-        await (await actionableFlowNode(page)).click();
+        await (await recoverActionableFlowNode(page)).click();
       }
     } else if (pick === 2) {
       const dx = Math.floor(random() * 120) - 60;
@@ -79,7 +80,7 @@ test("adversarial seeded interaction loop preserves invariants", async ({ page }
 
     if (step % 5 === 0) {
       await ensureStableShell(page, errors);
-      expect(await nodeCount(page)).toBeGreaterThanOrEqual(0);
+      expect(await nodeCount(page)).toBeLessThanOrEqual(80);
     }
   }
 

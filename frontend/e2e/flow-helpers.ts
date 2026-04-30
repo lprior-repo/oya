@@ -37,20 +37,19 @@ export const nodeCount = async (page: Page): Promise<number> => {
 export const flowNode = (page: Page): Locator => page.getByTestId("flow-node-click-target");
 
 export const actionableFlowNode = async (page: Page): Promise<Locator> => {
-  const immediate = await findActionableFlowNode(page);
-  if (immediate) {
-    return immediate;
-  }
-
-  await recoverCanvasActionability(page);
-  const recovered = await findActionableFlowNode(page);
-  if (recovered) {
-    return recovered;
-  }
-
+  const node = await findActionableFlowNode(page);
   const count = await flowNode(page).count();
+  if (node) {
+    return node;
+  }
+
   expect(count).toBeGreaterThan(0);
   throw new Error("No actionable flow node found");
+};
+
+export const recoverActionableFlowNode = async (page: Page): Promise<Locator> => {
+  await recoverCanvasActionability(page);
+  return actionableFlowNode(page);
 };
 
 const findActionableFlowNode = async (page: Page): Promise<Locator | null> => {
@@ -71,6 +70,10 @@ const findActionableFlowNode = async (page: Page): Promise<Locator | null> => {
 
 const recoverCanvasActionability = async (page: Page): Promise<void> => {
   await page.keyboard.press("Escape");
+  const closeInspector = page.getByTitle("Close inspector").first();
+  if ((await closeInspector.count()) > 0) {
+    await closeInspector.click({ timeout: 1_000 });
+  }
   const fitView = page.getByRole("button", { name: "Fit View" }).first();
   if ((await fitView.count()) > 0) {
     await fitView.click();

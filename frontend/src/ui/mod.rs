@@ -66,7 +66,7 @@ pub use expression_input::{ExpressionInput, NodeInfo};
 pub use inline_config_panel::InlineConfigPanel;
 pub use inspector_panel::InspectorPanel;
 pub use minimap::FlowMinimap;
-pub use node::{FlowNodeComponent, FlowNodeEvent};
+pub use node::{FlowNodeComponent, FlowNodeEvent, FlowNodeInlineState, FlowNodeSelection};
 pub use parallel_group_overlay::ParallelGroupOverlay;
 #[cfg(target_arch = "wasm32")]
 pub use payload_preview_panel::PayloadPreviewPanel;
