@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { runPromise } from "./effect";
 import {
   addNodeFromSidebar,
+  actionableFlowNode,
   attachPageErrorSink,
   ensureStableShell,
   flowNode,
@@ -20,12 +21,12 @@ const seeded = (seed: number): (() => number) => {
   };
 };
 
-async function dragFirstNode(page: Page, dx: number, dy: number): Promise<void> {
-  const first = flowNode(page).first();
-  if ((await first.count()) === 0) {
+async function dragActionableNode(page: Page, dx: number, dy: number): Promise<void> {
+  if ((await flowNode(page).count()) === 0) {
     return;
   }
-  const box = await first.boundingBox();
+  const node = await actionableFlowNode(page);
+  const box = await node.boundingBox();
   if (!box) {
     return;
   }
@@ -34,7 +35,7 @@ async function dragFirstNode(page: Page, dx: number, dy: number): Promise<void> 
   await page.mouse.down();
   await page.mouse.move(box.x + box.width / 2 + dx, box.y + box.height / 2 + dy);
   await page.mouse.up();
-  await expect(first).toBeVisible();
+  await expect(node).toBeVisible();
 }
 
 test("adversarial seeded interaction loop preserves invariants", async ({ page }) => {
@@ -51,14 +52,13 @@ test("adversarial seeded interaction loop preserves invariants", async ({ page }
     if (pick === 0) {
       await runPromise(addNodeFromSidebar(page));
     } else if (pick === 1) {
-      const first = flowNode(page).first();
-      if ((await first.count()) > 0) {
-        await first.evaluate((element: HTMLElement) => element.click());
+      if ((await flowNode(page).count()) > 0) {
+        await (await actionableFlowNode(page)).click();
       }
     } else if (pick === 2) {
       const dx = Math.floor(random() * 120) - 60;
       const dy = Math.floor(random() * 120) - 60;
-      await dragFirstNode(page, dx, dy);
+      await dragActionableNode(page, dx, dy);
     } else if (pick === 3) {
       await openCanvasContextMenu(page);
       await page.keyboard.press("Escape");

@@ -11,6 +11,30 @@ use crate::ui::InlineConfigPanel;
 use dioxus::prelude::*;
 use serde_json::Value;
 
+pub enum FlowNodeEvent {
+    NodeMouseDown(MouseEvent),
+    NodeClick(MouseEvent),
+    NodeDoubleClick(MouseEvent),
+    HandleMouseDown { event: MouseEvent, side: &'static str },
+    HandleMouseEnter(&'static str),
+    HandleMouseLeave,
+    InlineChange(Value),
+    InlineClose,
+}
+
+#[derive(Clone, PartialEq)]
+struct FlowNodePresentation {
+    category_border: &'static str,
+    category_icon_bg: &'static str,
+    category_accent_bar: &'static str,
+    exec_border: &'static str,
+    selected_classes: &'static str,
+    running_glow: &'static str,
+    z_index: i32,
+    preview: Option<String>,
+    has_execution_data: bool,
+}
+
 // ---------------------------------------------------------------------------
 // Pure helpers
 // ---------------------------------------------------------------------------
@@ -83,6 +107,77 @@ pub fn output_preview(output: Option<&Value>, max_lines: usize) -> Option<String
     Some(result)
 }
 
+#[must_use]
+const fn category_border_class(category: NodeCategory) -> &'static str {
+    match category {
+        NodeCategory::Entry => "border-emerald-500/40",
+        NodeCategory::Durable => "border-indigo-500/40",
+        NodeCategory::State => "border-orange-500/40",
+        NodeCategory::Flow => "border-amber-500/40",
+        NodeCategory::Timing => "border-pink-500/40",
+        NodeCategory::Signal => "border-blue-500/40",
+    }
+}
+
+#[must_use]
+const fn category_icon_bg_class(category: NodeCategory) -> &'static str {
+    match category {
+        NodeCategory::Entry => "bg-emerald-500/15 text-emerald-400",
+        NodeCategory::Durable => "bg-indigo-500/15 text-indigo-500",
+        NodeCategory::State => "bg-orange-500/15 text-orange-400",
+        NodeCategory::Flow => "bg-amber-500/15 text-amber-400",
+        NodeCategory::Timing => "bg-pink-500/15 text-pink-400",
+        NodeCategory::Signal => "bg-blue-500/15 text-blue-400",
+    }
+}
+
+#[must_use]
+const fn category_accent_bar_class(category: NodeCategory) -> &'static str {
+    match category {
+        NodeCategory::Entry => "bg-emerald-500/40",
+        NodeCategory::Durable => "bg-indigo-500/40",
+        NodeCategory::State => "bg-orange-500/40",
+        NodeCategory::Flow => "bg-amber-500/40",
+        NodeCategory::Timing => "bg-pink-500/40",
+        NodeCategory::Signal => "bg-blue-500/40",
+    }
+}
+
+#[must_use]
+fn flow_node_presentation(node: &Node, selected: bool, inline_open: bool) -> FlowNodePresentation {
+    let state = node.execution_state;
+    FlowNodePresentation {
+        category_border: category_border_class(node.category),
+        category_icon_bg: category_icon_bg_class(node.category),
+        category_accent_bar: category_accent_bar_class(node.category),
+        exec_border: node_border_class(state),
+        selected_classes: selected_class(selected),
+        running_glow: running_glow_class(state),
+        z_index: if selected || inline_open { 10 } else { 1 },
+        preview: output_preview(node.last_output.as_ref(), 3),
+        has_execution_data: node.last_output.is_some()
+            || matches!(state, ExecutionState::Completed | ExecutionState::Failed),
+    }
+}
+
+#[must_use]
+const fn selected_class(selected: bool) -> &'static str {
+    if selected {
+        "ring-2 ring-cyan-500/55 border-cyan-500/40 shadow-xl shadow-cyan-500/20"
+    } else {
+        "hover:border-slate-300"
+    }
+}
+
+#[must_use]
+const fn running_glow_class(state: ExecutionState) -> &'static str {
+    if matches!(state, ExecutionState::Running) {
+        "shadow-[0_0_0_2px_rgba(6,182,212,0.2)]"
+    } else {
+        ""
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -92,239 +187,183 @@ pub fn FlowNodeComponent(
     node: Node,
     selected: bool,
     inline_open: bool,
-    on_mouse_down: EventHandler<MouseEvent>,
-    on_click: EventHandler<MouseEvent>,
-    on_double_click: EventHandler<MouseEvent>,
-    on_handle_mouse_down: EventHandler<(MouseEvent, String)>,
-    on_handle_mouse_enter: EventHandler<String>,
-    on_handle_mouse_leave: EventHandler<()>,
-    on_inline_change: EventHandler<Value>,
-    on_inline_close: EventHandler<()>,
+    on_event: EventHandler<FlowNodeEvent>,
 ) -> Element {
-    let category = node.category;
-    let icon = node.icon.clone();
-    let exec_state = node.execution_state;
-
-    let category_border = match category {
-        NodeCategory::Entry => "border-emerald-500/40",
-        NodeCategory::Durable => "border-indigo-500/40",
-        NodeCategory::State => "border-orange-500/40",
-        NodeCategory::Flow => "border-amber-500/40",
-        NodeCategory::Timing => "border-pink-500/40",
-        NodeCategory::Signal => "border-blue-500/40",
-    };
-
-    let category_icon_bg = match category {
-        NodeCategory::Entry => "bg-emerald-500/15 text-emerald-400",
-        NodeCategory::Durable => "bg-indigo-500/15 text-indigo-500",
-        NodeCategory::State => "bg-orange-500/15 text-orange-400",
-        NodeCategory::Flow => "bg-amber-500/15 text-amber-400",
-        NodeCategory::Timing => "bg-pink-500/15 text-pink-400",
-        NodeCategory::Signal => "bg-blue-500/15 text-blue-400",
-    };
-
-    let category_accent_bar = match category {
-        NodeCategory::Entry => "bg-emerald-500/40",
-        NodeCategory::Durable => "bg-indigo-500/40",
-        NodeCategory::State => "bg-orange-500/40",
-        NodeCategory::Flow => "bg-amber-500/40",
-        NodeCategory::Timing => "bg-pink-500/40",
-        NodeCategory::Signal => "bg-blue-500/40",
-    };
-
-    let exec_border = node_border_class(exec_state);
-
-    let selected_classes = if selected {
-        "ring-2 ring-cyan-500/55 border-cyan-500/40 shadow-xl shadow-cyan-500/20"
-    } else {
-        "hover:border-slate-300"
-    };
-
-    // Running nodes retain the subtle outer glow even when not selected.
-    let running_glow = if matches!(exec_state, ExecutionState::Running) {
-        "shadow-[0_0_0_2px_rgba(6,182,212,0.2)]"
-    } else {
-        ""
-    };
-
-    let z_index = if selected || inline_open { 10 } else { 1 };
-
-    // Output preview: up to 3 lines of pretty JSON.
-    let preview = output_preview(node.last_output.as_ref(), 3);
-
-    // Show an inspect hint when the node carries execution data.
-    let has_execution_data = node.last_output.is_some()
-        || matches!(exec_state, ExecutionState::Completed | ExecutionState::Failed);
+    let presentation = flow_node_presentation(&node, selected, inline_open);
 
     rsx! {
         div {
             "data-node-id": "{node.id}",
             class: "absolute select-none",
-            style: "left: {node.x}px; top: {node.y}px; z-index: {z_index};",
+            style: "left: {node.x}px; top: {node.y}px; z-index: {presentation.z_index};",
+            FlowNodeCard { node: node.clone(), inline_open, presentation: presentation.clone(), on_event }
+            FlowNodeInlinePanel { node: node.clone(), inline_open, on_event }
+        }
+    }
+}
 
-            div {
-                class: "group relative w-[220px] rounded-xl border bg-gradient-to-b from-white to-slate-50/70 transition-all duration-150 cursor-grab active:cursor-grabbing {category_border} {exec_border} {selected_classes} {running_glow}",
-                "data-testid": "flow-node",
-                onmousedown: move |e| {
-                    on_mouse_down.call(e);
-                },
-                onclick: move |e| {
-                    on_click.call(e);
-                },
-                ondoubleclick: move |e| {
-                    e.stop_propagation();
-                    on_double_click.call(e);
-                },
+#[component]
+fn FlowNodeCard(
+    node: Node,
+    inline_open: bool,
+    presentation: FlowNodePresentation,
+    on_event: EventHandler<FlowNodeEvent>,
+) -> Element {
+    rsx! {
+        div {
+            class: "group relative w-[220px] rounded-xl border bg-gradient-to-b from-white to-slate-50/70 transition-all duration-150 cursor-grab active:cursor-grabbing {presentation.category_border} {presentation.exec_border} {presentation.selected_classes} {presentation.running_glow}",
+            "data-testid": "flow-node",
+            onmousedown: move |e| on_event.call(FlowNodeEvent::NodeMouseDown(e)),
+            onclick: move |e| on_event.call(FlowNodeEvent::NodeClick(e)),
+            ondoubleclick: move |e| { e.stop_propagation(); on_event.call(FlowNodeEvent::NodeDoubleClick(e)); },
+            FlowNodeHandle { side: "target", on_event }
+            FlowNodeTopRule {}
+            FlowNodeHeader { node: node.clone(), presentation: presentation.clone() }
+            FlowNodeMeta { category: node.category, inline_open }
+            FlowNodeExecutionHints { node }
+            FlowNodeOutputPreview { preview: presentation.preview.clone() }
+            div { class: "h-[2px] rounded-b-lg {presentation.category_accent_bar}" }
+            FlowNodeInspectHint { visible: presentation.has_execution_data }
+            FlowNodeHandle { side: "source", on_event }
+        }
+    }
+}
 
-                // ── Input handle (left) ──────────────────────────────────
-                div {
-                    class: "absolute -left-[5px] top-1/2 -translate-y-1/2 h-[10px] w-[10px] rounded-full border-2 border-slate-300 bg-white hover:bg-blue-500 hover:border-blue-500 hover:scale-125 transition-all duration-150 cursor-ew-resize z-10",
-                    onmousedown: move |e| {
-                        e.stop_propagation();
-                        on_handle_mouse_down.call((e, "target".to_string()));
-                    },
-                    onmouseenter: move |_| on_handle_mouse_enter.call("target".to_string()),
-                    onmouseleave: move |_| on_handle_mouse_leave.call(())
-                }
+#[component]
+fn FlowNodeHandle(side: &'static str, on_event: EventHandler<FlowNodeEvent>) -> Element {
+    let class = if side == "target" {
+        "absolute -left-[5px] top-1/2 -translate-y-1/2 h-[10px] w-[10px] rounded-full border-2 border-slate-300 bg-white hover:bg-blue-500 hover:border-blue-500 hover:scale-125 transition-all duration-150 cursor-ew-resize z-10"
+    } else {
+        "absolute -right-[5px] top-1/2 -translate-y-1/2 h-[10px] w-[10px] rounded-full border-2 border-slate-300 bg-white hover:bg-blue-500 hover:border-blue-500 hover:scale-125 transition-all duration-150 cursor-ew-resize z-10"
+    };
+    rsx! {
+        div {
+            class,
+            onmousedown: move |e| { e.stop_propagation(); on_event.call(FlowNodeEvent::HandleMouseDown { event: e, side }); },
+            onmouseenter: move |_| on_event.call(FlowNodeEvent::HandleMouseEnter(side)),
+            onmouseleave: move |_| on_event.call(FlowNodeEvent::HandleMouseLeave)
+        }
+    }
+}
 
-                // ── Header row ───────────────────────────────────────────
-                div {
-                    class: "absolute inset-x-0 top-0 h-[1px] rounded-t-xl opacity-70",
-                    style: "background: linear-gradient(90deg, rgba(14,165,233,0.55), rgba(45,212,191,0.45), rgba(251,191,36,0.45));"
-                }
+#[component]
+fn FlowNodeTopRule() -> Element {
+    rsx! {
+        div {
+            class: "absolute inset-x-0 top-0 h-[1px] rounded-t-xl opacity-70",
+            style: "background: linear-gradient(90deg, rgba(14,165,233,0.55), rgba(45,212,191,0.45), rgba(251,191,36,0.45));"
+        }
+    }
+}
 
-                div { class: "flex items-center gap-3 px-3.5 py-3",
-                    div { class: "flex h-8 w-8 shrink-0 items-center justify-center rounded-md {category_icon_bg} shadow-sm",
-                        {icon_by_name(&icon, "h-4 w-4".to_string())}
-                    }
-
-                    div { class: "flex flex-col gap-0.5 min-w-0 flex-1",
-                        span { class: "text-[13px] font-semibold leading-tight text-slate-900 truncate", "{node.name}" }
-                        span { class: "text-[11px] leading-tight text-slate-500 truncate", "{node.description}" }
-                    }
-
-                    // ── Status badge (top-right) ─────────────────────────
-                    div { class: "ml-auto shrink-0",
-                        {
-                            match exec_state {
-                                ExecutionState::Idle => rsx! { div {} },
-                                ExecutionState::Queued => rsx! {
-                                    span {
-                                        class: "{status_badge_class(ExecutionState::Queued)}",
-                                        {icon_by_name("clock", "h-2.5 w-2.5".to_string())}
-                                        "{status_badge_label(ExecutionState::Queued)}"
-                                    }
-                                },
-                                ExecutionState::Running => rsx! {
-                                    span {
-                                        class: "{status_badge_class(ExecutionState::Running)}",
-                                        // Animated pulse dot
-                                        span {
-                                            class: "relative flex h-2 w-2",
-                                            span {
-                                                class: "animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"
-                                            }
-                                            span {
-                                                class: "relative inline-flex rounded-full h-2 w-2 bg-blue-500"
-                                            }
-                                        }
-                                        "{status_badge_label(ExecutionState::Running)}"
-                                    }
-                                },
-                                ExecutionState::Completed => rsx! {
-                                    span {
-                                        class: "{status_badge_class(ExecutionState::Completed)}",
-                                        {icon_by_name("check-circle", "h-2.5 w-2.5".to_string())}
-                                        "{status_badge_label(ExecutionState::Completed)}"
-                                    }
-                                },
-                                ExecutionState::Failed => rsx! {
-                                    span {
-                                        class: "{status_badge_class(ExecutionState::Failed)}",
-                                        title: "Execution failed",
-                                        {icon_by_name("x", "h-2.5 w-2.5".to_string())}
-                                        "{status_badge_label(ExecutionState::Failed)}"
-                                    }
-                                },
-                                ExecutionState::Skipped => rsx! {
-                                    span {
-                                        class: "{status_badge_class(ExecutionState::Skipped)}",
-                                        {icon_by_name("x", "h-2.5 w-2.5".to_string())}
-                                        "{status_badge_label(ExecutionState::Skipped)}"
-                                    }
-                                },
-                            }
-                        }
-                    }
-                }
-
-                div { class: "-mt-1 flex items-center gap-1.5 px-3.5 pb-2 text-[9px] uppercase tracking-wide text-slate-400",
-                    span { class: "rounded bg-white px-1.5 py-px", "{category}" }
-                    if inline_open {
-                        span { class: "rounded border border-cyan-200 bg-cyan-50 px-1.5 py-px text-cyan-700", "Editing" }
-                    }
-                }
-
-                // ── Config hint row ──────────────────────────────────────
-                if node.execution_data.get("journalIndex").is_some() || node.execution_data.get("retryCount").and_then(serde_json::Value::as_u64) > Some(0) {
-                    div { class: "flex items-center gap-2 px-3 pb-2 text-[9px] font-mono text-slate-500",
-                        if let Some(idx) = node.execution_data.get("journalIndex").and_then(serde_json::Value::as_u64) {
-                            span { class: "rounded bg-slate-100 px-1 py-px", "journal #{idx}" }
-                        }
-                        if let Some(retries) = node.execution_data.get("retryCount").and_then(serde_json::Value::as_u64) {
-                            if retries > 0 {
-                                span { class: "rounded bg-red-500/10 text-red-400/70 px-1 py-px", "{retries} retries" }
-                            }
-                        }
-                        if let Some(key) = node.execution_data.get("idempotencyKey").and_then(|i| i.as_str()) {
-                            span { class: "rounded bg-slate-100 px-1 py-px truncate max-w-[80px]", title: "{key}", "key: {key}" }
-                        }
-                    }
-                }
-
-                // ── Output preview ───────────────────────────────────────
-                if let Some(ref text) = preview {
-                    div { class: "px-3 pb-2",
-                        pre {
-                            class: "text-[9px] font-mono text-slate-400 truncate whitespace-pre-wrap break-all leading-tight",
-                            "{text}"
-                        }
-                    }
-                }
-
-                // ── Category accent bar ──────────────────────────────────
-                div { class: "h-[2px] rounded-b-lg {category_accent_bar}" }
-
-                // ── Click-to-inspect hint ────────────────────────────────
-                if has_execution_data {
-                    div {
-                        class: "absolute bottom-1 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-150",
-                        title: "Click to inspect execution data",
-                        {icon_by_name("info", "h-2.5 w-2.5 text-slate-400".to_string())}
-                    }
-                }
-
-                // ── Output handle (right) ────────────────────────────────
-                div {
-                    class: "absolute -right-[5px] top-1/2 -translate-y-1/2 h-[10px] w-[10px] rounded-full border-2 border-slate-300 bg-white hover:bg-blue-500 hover:border-blue-500 hover:scale-125 transition-all duration-150 cursor-ew-resize z-10",
-                    onmousedown: move |e| {
-                        e.stop_propagation();
-                        on_handle_mouse_down.call((e, "source".to_string()));
-                    },
-                    onmouseenter: move |_| on_handle_mouse_enter.call("source".to_string()),
-                    onmouseleave: move |_| on_handle_mouse_leave.call(())
-                }
+#[component]
+fn FlowNodeHeader(node: Node, presentation: FlowNodePresentation) -> Element {
+    rsx! {
+        div { class: "flex items-center gap-3 px-3.5 py-3", "data-testid": "flow-node-click-target",
+            div { class: "flex h-8 w-8 shrink-0 items-center justify-center rounded-md {presentation.category_icon_bg} shadow-sm", {icon_by_name(&node.icon, "h-4 w-4".to_string())} }
+            div { class: "flex flex-col gap-0.5 min-w-0 flex-1",
+                span { class: "text-[13px] font-semibold leading-tight text-slate-900 truncate", "{node.name}" }
+                span { class: "text-[11px] leading-tight text-slate-500 truncate", "{node.description}" }
             }
+            div { class: "ml-auto shrink-0", {render_status_badge(node.execution_state)} }
+        }
+    }
+}
 
-            if inline_open {
-                div {
-                    class: "mt-1",
-                    onclick: move |e| e.stop_propagation(),
-                    InlineConfigPanel {
-                        node: node.clone(),
-                        on_change: on_inline_change,
-                        on_close: on_inline_close,
-                    }
+fn render_status_badge(state: ExecutionState) -> Element {
+    match state {
+        ExecutionState::Idle => rsx! { div {} },
+        ExecutionState::Running => render_running_badge(),
+        _ => render_static_status_badge(state),
+    }
+}
+
+fn render_running_badge() -> Element {
+    rsx! {
+        span { class: "{status_badge_class(ExecutionState::Running)}",
+            span { class: "relative flex h-2 w-2",
+                span { class: "animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" }
+                span { class: "relative inline-flex rounded-full h-2 w-2 bg-blue-500" }
+            }
+            "{status_badge_label(ExecutionState::Running)}"
+        }
+    }
+}
+
+fn render_static_status_badge(state: ExecutionState) -> Element {
+    let icon = match state {
+        ExecutionState::Queued => "clock",
+        ExecutionState::Completed => "check-circle",
+        _ => "x",
+    };
+    rsx! {
+        span { class: "{status_badge_class(state)}", {icon_by_name(icon, "h-2.5 w-2.5".to_string())} "{status_badge_label(state)}" }
+    }
+}
+
+#[component]
+fn FlowNodeMeta(category: NodeCategory, inline_open: bool) -> Element {
+    rsx! {
+        div { class: "-mt-1 flex items-center gap-1.5 px-3.5 pb-2 text-[9px] uppercase tracking-wide text-slate-400",
+            span { class: "rounded bg-white px-1.5 py-px", "{category}" }
+            if inline_open { span { class: "rounded border border-cyan-200 bg-cyan-50 px-1.5 py-px text-cyan-700", "Editing" } }
+        }
+    }
+}
+
+#[component]
+fn FlowNodeExecutionHints(node: Node) -> Element {
+    let journal = node.execution_data.get("journalIndex").and_then(Value::as_u64);
+    let retries = node.execution_data.get("retryCount").and_then(Value::as_u64);
+    let key =
+        node.execution_data.get("idempotencyKey").and_then(Value::as_str).map(ToString::to_string);
+    let visible = journal.is_some() || retries > Some(0) || key.is_some();
+    rsx! {
+        if visible {
+            div { class: "flex items-center gap-2 px-3 pb-2 text-[9px] font-mono text-slate-500",
+                if let Some(idx) = journal { span { class: "rounded bg-slate-100 px-1 py-px", "journal #{idx}" } }
+                if let Some(count) = retries { if count > 0 { span { class: "rounded bg-red-500/10 text-red-400/70 px-1 py-px", "{count} retries" } } }
+                if let Some(idempotency_key) = key { span { class: "rounded bg-slate-100 px-1 py-px truncate max-w-[80px]", title: "{idempotency_key}", "key: {idempotency_key}" } }
+            }
+        }
+    }
+}
+
+#[component]
+fn FlowNodeOutputPreview(preview: Option<String>) -> Element {
+    rsx! {
+        if let Some(text) = preview {
+            div { class: "px-3 pb-2",
+                pre { class: "text-[9px] font-mono text-slate-400 truncate whitespace-pre-wrap break-all leading-tight", "{text}" }
+            }
+        }
+    }
+}
+
+#[component]
+fn FlowNodeInspectHint(visible: bool) -> Element {
+    rsx! {
+        if visible {
+            div { class: "absolute bottom-1 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-150", title: "Click to inspect execution data", {icon_by_name("info", "h-2.5 w-2.5 text-slate-400".to_string())} }
+        }
+    }
+}
+
+#[component]
+fn FlowNodeInlinePanel(
+    node: Node,
+    inline_open: bool,
+    on_event: EventHandler<FlowNodeEvent>,
+) -> Element {
+    rsx! {
+        if inline_open {
+            div {
+                class: "mt-1",
+                onclick: move |e| e.stop_propagation(),
+                InlineConfigPanel {
+                    node,
+                    on_change: move |value| on_event.call(FlowNodeEvent::InlineChange(value)),
+                    on_close: move |()| on_event.call(FlowNodeEvent::InlineClose),
                 }
             }
         }

@@ -2,9 +2,9 @@ import { expect, test } from "@playwright/test";
 import { runPromise } from "./effect";
 import {
   addNodeFromSidebar,
+  actionableFlowNode,
   attachPageErrorSink,
   ensureStableShell,
-  flowNode,
   nodeCount,
   openCanvasContextMenu,
   waitForEditorShell,
@@ -29,9 +29,7 @@ test("context menu opens palette and closes with escape", async ({ page }) => {
   await runPromise(waitForEditorShell(page));
 
   await openCanvasContextMenu(page);
-  await page.getByRole("button", { name: "Add Node" }).evaluate((element: HTMLElement) =>
-    element.click(),
-  );
+  await page.getByRole("button", { name: "Add Node" }).click();
   await expect(page.getByText("Quick Add Node", { exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByText("Quick Add Node", { exact: true })).toHaveCount(0);
@@ -50,7 +48,7 @@ test("adds multiple nodes and deletes one selected node", async ({ page }) => {
   const beforeDelete = await nodeCount(page);
   expect(beforeDelete).toBeGreaterThanOrEqual(3);
 
-  const firstNode = flowNode(page).first();
+  const firstNode = await actionableFlowNode(page);
   await firstNode.click();
 
   const selectedPanel = page.locator("aside").filter({ hasText: "Node Name" }).first();

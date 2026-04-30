@@ -41,11 +41,7 @@ tasks:
 
   build-web:
     script: |
-      npm ci --prefer-offline --no-audit
-      node_modules/.bin/tailwindcss -i ./assets/tailwind.input.css -o ./assets/tailwind.css
-      env -u RUSTC_WRAPPER dx build --platform web --release
-      mkdir -p target/dx/oya-frontend/release/web/public/assets
-      cp assets/tailwind.css target/dx/oya-frontend/release/web/public/assets/tailwind.css
+      sh scripts/build-web-release.sh
 
   coverage:
     command: "cargo llvm-cov --summary-only"

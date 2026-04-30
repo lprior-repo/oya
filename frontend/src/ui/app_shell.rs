@@ -11,9 +11,10 @@ use crate::ui::constants::{
     NODE_WIDTH, ZOOM_CENTER_X, ZOOM_CENTER_Y, ZOOM_DELTA,
 };
 use crate::ui::{
-    CanvasArea, CanvasContextMenu, EmptyCanvas, FlowPosition, FlowToolbar, InspectorPanel,
-    NodeCommandPalette, NodeSidebar, NodeTemplateId, PayloadPreviewPanel, PrototypePalette,
-    RightPanel, RunStatusBar, SelectedNodePanel, SettingsOverlay, ShortcutsOverlay, ToastContainer,
+    CanvasArea, CanvasContextMenu, CanvasPanelControls, CanvasPreviewLayer, EmptyCanvas,
+    FlowPosition, FlowToolbar, InspectorPanel, NodeCommandPalette, NodeSidebar, NodeTemplateId,
+    PayloadPreviewPanel, PrototypePalette, RightPanel, RunStatusBar, SelectedNodePanel,
+    SettingsOverlay, ShortcutsOverlay, ToastContainer,
 };
 use dioxus::prelude::*;
 use std::fmt::Write;
@@ -426,11 +427,8 @@ pub fn AppShell() -> Element {
                         workflow: workflow,
                         selection: selection,
                         canvas: canvas,
-                        panels: panels,
-                        temp_edge: temp_edge,
-                        preview_nodes: preview_nodes,
-                        preview_edges: preview_edges,
-                        show_inspector: show_inspector,
+                        preview: CanvasPreviewLayer { temp_edge, preview_nodes, preview_edges },
+                        controls: CanvasPanelControls { panels, show_inspector },
                     }
 
                     if *node_count.read() == 0 {

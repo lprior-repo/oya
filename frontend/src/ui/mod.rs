@@ -50,7 +50,7 @@ pub use app_io::download_workflow_json;
 #[cfg(target_arch = "wasm32")]
 pub use app_shell::AppShell;
 #[cfg(target_arch = "wasm32")]
-pub use canvas_area::CanvasArea;
+pub use canvas_area::{CanvasArea, CanvasPanelControls, CanvasPreviewLayer};
 pub use canvas_context_menu::CanvasContextMenu;
 pub use command_palette::NodeCommandPalette;
 pub use config_panel::NodeConfigEditor;
@@ -66,7 +66,7 @@ pub use expression_input::{ExpressionInput, NodeInfo};
 pub use inline_config_panel::InlineConfigPanel;
 pub use inspector_panel::InspectorPanel;
 pub use minimap::FlowMinimap;
-pub use node::FlowNodeComponent;
+pub use node::{FlowNodeComponent, FlowNodeEvent};
 pub use parallel_group_overlay::ParallelGroupOverlay;
 #[cfg(target_arch = "wasm32")]
 pub use payload_preview_panel::PayloadPreviewPanel;

@@ -1,0 +1,42 @@
+#!/usr/bin/env sh
+set -eu
+
+input=""
+output=""
+expect_output="0"
+
+for arg in "$@"; do
+  if [ "$expect_output" = "1" ]; then
+    output="$arg"
+    expect_output="0"
+    continue
+  fi
+
+  case "$arg" in
+    -o)
+      expect_output="1"
+      ;;
+    -O0|--strip-debug|--enable-*|--disable-*|--memory-packing|--debuginfo)
+      ;;
+    -O1|-O2|-O3|-O4|-Os|-Oz)
+      echo "wasm-opt-level0 only supports explicit -O0 builds" >&2
+      exit 2
+      ;;
+    -*)
+      echo "unsupported wasm-opt-level0 flag: $arg" >&2
+      exit 2
+      ;;
+    *)
+      if [ -z "$input" ]; then
+        input="$arg"
+      fi
+      ;;
+  esac
+done
+
+if [ -z "$input" ] || [ -z "$output" ]; then
+  echo "usage: wasm-opt <input.wasm> -O0 -o <output.wasm>" >&2
+  exit 2
+fi
+
+cp "$input" "$output"

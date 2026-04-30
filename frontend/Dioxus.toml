@@ -8,3 +8,9 @@ title = "Oya Frontend"
 
 [web.watcher]
 watch_path = ["src", "style.css"]
+
+[web.wasm_opt]
+# Dioxus 0.7 still invokes wasm-opt for release web builds. The bundled Binaryen
+# currently aborts on this artifact's DWARF sections, so release builds use the
+# explicit no-optimization level and Moon installs a local -O0 shim for this tool.
+level = "0"

@@ -19,18 +19,63 @@ export const addNodeFromSidebar = (
   page: Page,
   label = "HTTP Trigger",
 ): Effect<Locator> =>
-  tap(succeed(page.getByTestId("flow-node").last()), async (node) => {
+  fromPromise(async () => {
+    const beforeCount = await nodeCount(page);
     const button = page.locator("aside button").filter({ hasText: label }).first();
     await expect(button).toBeVisible();
-    await button.evaluate((element: HTMLElement) => element.click());
+    await button.click();
+    await expect(page.locator("div[data-node-id]")).toHaveCount(beforeCount + 1);
+    const node = await actionableFlowNode(page);
     await expect(node).toBeVisible();
+    return node;
   });
 
 export const nodeCount = async (page: Page): Promise<number> => {
   return page.locator("div[data-node-id]").count();
 };
 
-export const flowNode = (page: Page): Locator => page.getByTestId("flow-node");
+export const flowNode = (page: Page): Locator => page.getByTestId("flow-node-click-target");
+
+export const actionableFlowNode = async (page: Page): Promise<Locator> => {
+  const immediate = await findActionableFlowNode(page);
+  if (immediate) {
+    return immediate;
+  }
+
+  await recoverCanvasActionability(page);
+  const recovered = await findActionableFlowNode(page);
+  if (recovered) {
+    return recovered;
+  }
+
+  const count = await flowNode(page).count();
+  expect(count).toBeGreaterThan(0);
+  throw new Error("No actionable flow node found");
+};
+
+const findActionableFlowNode = async (page: Page): Promise<Locator | null> => {
+  const nodes = flowNode(page);
+  const count = await nodes.count();
+  for (let index = count - 1; index >= 0; index -= 1) {
+    const candidate = nodes.nth(index);
+    try {
+      await candidate.click({ trial: true, timeout: 1_000 });
+      return candidate;
+    } catch {
+      // Keep probing older nodes; trial clicks exercise Playwright hit-testing.
+    }
+  }
+
+  return null;
+};
+
+const recoverCanvasActionability = async (page: Page): Promise<void> => {
+  await page.keyboard.press("Escape");
+  const fitView = page.getByRole("button", { name: "Fit View" }).first();
+  if ((await fitView.count()) > 0) {
+    await fitView.click();
+  }
+};
 
 export const openCanvasContextMenu = async (page: Page): Promise<void> => {
   const canvas = page.locator("main");
