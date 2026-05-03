@@ -121,17 +121,17 @@ Tests will catch:
 ## Running Tests
 
 ```bash
-# Fast suite (326 tests, <1 second)
-cargo test
+# Fast suite through Moon
+moon run :test
 
-# With property tests (1000s of generated cases)
-cargo test --test properties
+# Root CI, including property and gate coverage wired into Moon
+moon run oya:root-ci
 
-# Behavior tests only
- cargo test --test behavior
+# Browser frontend behavior gate
+moon run frontend:e2e
 
-# Everything including real tool verification
-cargo test -- --ignored
+# Everything wired into workspace CI
+moon run :ci
 ```
 
 ---

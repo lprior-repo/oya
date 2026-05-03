@@ -35,7 +35,6 @@ This is the "conservative, correct side" of AI development: deterministic workfl
 | **Moon** | CI/CD wrapper—executes validation gates, emits pass/fail evidence |
 | **Git/GitHub** | Branch/worktree isolation and PR merge-flow primitive |
 | **Beads (br)** | Intake and lifecycle source of truth for all work items |
-| **Codanna MCP** | Code discovery (symbols, callers, calls, impact, dependency tracing) |
 | **Fjall** | Persistence baseline for run and evidence state |
 
 ### Observability
@@ -85,7 +84,7 @@ The planner enforces spec quality before work begins:
 - Rejects or splits oversized or vague changes
 
 ### Stage 1: Scout Phase
-- **Codanna MCP** analyzes the Rust workspace/monorepo
+- Repository discovery identifies bounded contexts and relevant code paths
 - Identifies bounded contexts, modules, types, traits, and functions relevant to the spec
 - Builds a token‑efficient context pack
 - Runs in parallel across bounded contexts where possible
@@ -462,18 +461,6 @@ git fetch origin                   # Sync remote refs
 git rebase origin/main             # Rebase onto latest main
 git push -u origin HEAD:<branch>   # Publish for PR landing
 ```
-
-### Codanna (Code Discovery)
-
-```bash
-codanna_search_symbols             # Find symbols
-codanna_find_symbol                # Get symbol details
-codanna_get_calls                  # What a function calls
-codanna_find_callers               # What calls a function
-codanna_analyze_impact             # Full dependency graph
-```
-
----
 
 ## Complete Bead Workflow
 

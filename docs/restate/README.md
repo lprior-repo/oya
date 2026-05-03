@@ -68,7 +68,7 @@ Read `llms.txt` first for navigation, then `llms-full.txt` for complete referenc
 ### For Humans
 Browse `docs/` directory by category, or use `INDEX.json` for programmatic access.
 
-### For Codanna Indexing
+### For Search Indexing
 The `docs/` directory contains structured markdown suitable for semantic search indexing.
 
 ## Source

@@ -1,5 +1,7 @@
 # Oya Runtime Flow
 
+Oya is a Restate-backed visualizer, OpenCode runtime, and strict Rust quality gate for AI-written code. Restate is the main orchestrator: it owns durable lifecycle execution, retries, and service invocation boundaries while Oya exposes live OpenCode traces to the Dioxus frontend and requires Moon-driven Rust checks before work can land.
+
 This repo runs Oya with a managed local `restate-server` process and fixed local ports:
 
 - Restate ingress/API: `http://127.0.0.1:8080`

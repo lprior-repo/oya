@@ -18,7 +18,7 @@ jobs = 3
 ```
 
 **How it works:**
-1. Wrapper intercepts `cargo build` calls
+1. Wrapper intercepts Rust compilation calls made by Moon tasks
 2. Computes hash of: source code, compiler flags, environment
 3. Checks cache for matching hash
 4. If hit: returns cached `.rlib`/`.rmeta` instantly
@@ -71,7 +71,7 @@ unstable_remote:
 **Hit rate:** 100% for repeated builds
 
 **How it works:**
-1. `cargo build` requests dependency
+1. Moon task requests Rust dependencies through the configured build toolchain
 2. Checks local `~/.cargo/registry`
 3. Downloads if missing
 4. Never re-downloads same version
@@ -81,7 +81,7 @@ unstable_remote:
 ## Cache Hierarchy
 
 ```
-Cargo build request
+Moon build request
     ↓
 [1] sccache check
     ├─ Hit: Return cached .rlib INSTANT
@@ -179,9 +179,9 @@ cd /home/lewis/src/oya
 # Warm Moon cache
 moon run :ci --force
 
-# Warm sccache (full build)
-cargo build --release --workspace --all-features
-cargo test --workspace --all-features
+# Warm sccache through Moon entrypoints
+moon run :build --force
+moon run :test --force
 ```
 
 ### 2. Parallelism Tuning

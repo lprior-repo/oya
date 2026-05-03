@@ -1,8 +1,0 @@
-# Codanna ignore patterns (gitignore syntax)
-target/
-.zjj/
-.beads/
-node_modules/
-*.lock
-*.log
-.git/

@@ -1,10 +1,9 @@
 # Mutation Testing Policy
 
 `moon run :mutants-quick` is the explicit hardening ratchet for mutation testing.
-It builds a Git diff file against `main` and runs
-`cargo mutants --in-diff target/mutants-quick.diff --baseline run`, so local
-operators can exercise mutation testing on changed Rust code without turning it
-into part of the fast CI baseline.
+It builds a Git diff file against `main` and invokes the configured mutation
+runner through Moon, so local operators can exercise mutation testing on changed
+Rust code without turning it into part of the fast CI baseline.
 
 Policy:
 

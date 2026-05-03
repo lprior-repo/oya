@@ -2,7 +2,6 @@
 .zjj/
 .moon/cache/
 .beads/
-.codanna/
 node_modules/
 playwright-report/
 test-results/

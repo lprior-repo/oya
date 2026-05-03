@@ -52,9 +52,6 @@ timer
 profiling/
 bin/
 
-# Codanna index and cache artifacts
-.codanna/
-
 # Local runtime and generated scratch artifacts
 oya-db/
 restate-data/

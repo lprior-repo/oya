@@ -2,7 +2,9 @@
 
 > **Storm Goddess. Transformer. Gatekeeper. The feminine force that takes what it needs.**
 
-This document defines the unified structural blueprint for Oya, a durable workflow orchestrator built on Restate that automates bead-based task execution with AI-driven code generation and quality gates.
+This document defines the unified structural blueprint for Oya, a Restate-backed visualizer plus OpenCode runtime plus strict Rust quality gate. Restate is the main orchestrator for durable lifecycle execution, retries, and service boundaries; Oya uses it to automate bead-based task execution with AI-driven code generation, live trace inspection, and Moon-enforced Rust verification gates.
+
+First-class architecture decisions are tracked in `docs/adr/`.
 
 ---
 
@@ -23,11 +25,12 @@ This document defines the unified structural blueprint for Oya, a durable workfl
 
 ## Architecture Overview
 
-Oya is a **durable workflow orchestrator** that:
+Oya is a **Restate-backed durable visual OpenCode runtime** that:
 
 - Picks ready beads from Steve Yegge's beads system
 - Creates isolated Git branches or Git worktrees for each bead when isolation is required
 - Runs AI execution via OpenCode CLI
+- Visualizes lifecycle state and live OpenCode traces in the Dioxus frontend
 - Executes quality gates via Moon
 - Manages PR creation and merging
 - Handles retries, failures, and state transitions
@@ -35,10 +38,12 @@ Oya is a **durable workflow orchestrator** that:
 ### Key Characteristics
 
 - **Durable Execution**: All state transitions are persisted by Restate
+- **Restate-Orchestrated**: Restate is the authoritative runtime for lifecycle execution, retries, and handler boundaries
 - **Functional Core**: Pure functions with effect interpreters
 - **Zero Panics**: `#![deny(clippy::unwrap_used)]` enforced
 - **Test-First**: TDD workflow with sealed acceptance tests
 - **Gate-Driven**: Quality gates block advancement at each stage
+- **Visual Runtime**: Frontend visibility is a core correctness surface for vibe-coded Rust
 
 ---
 
@@ -493,49 +498,49 @@ Attempt 1
 └──────────────────────────────────────────────────────────┘
 
 ┌─────────────────┐
-│ FORMAT          │  rustfmt --check
+│ FORMAT          │  moon run :fmt
 │ (fast)          │  All code formatted correctly
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│ LINT            │  clippy --all-targets --all-features
+│ LINT            │  moon run :clippy
 │ (fast)          │  Zero warnings, deny unwrap/panic
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│ COMPILE         │  cargo check
+│ COMPILE         │  moon run :check
 │ (medium)        │  Zero compilation errors
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│ TEST            │  cargo test --all
+│ TEST            │  moon run :test
 │ (slow)          │  All tests pass
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│ COVERAGE        │  cargo tarpaulin
+│ COVERAGE        │  moon run :coverage
 │ (slow)          │  >= 80% coverage (optional)
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│ MUTANTS         │  cargo mutants
+│ MUTANTS         │  moon run :mutants
 │ (very slow)     │  Kill all mutants (optional)
 └─────────────────┘
 ```
 
 ### Moon Task Mapping
 
-| Moon Task | Gate | Command |
+| Moon Task | Gate | Underlying Check |
 |-----------|------|---------|
-| `moon run :fmt` | Format | `rustfmt --check` |
-| `moon run :clippy` | Lint | `clippy --deny warnings` |
-| `moon run :check` | Compile | `cargo check` |
-| `moon run :test` | Test | `cargo test --all` |
+| `moon run :fmt` | Format | Rust formatting |
+| `moon run :clippy` | Lint | Rust lint rules |
+| `moon run :check` | Compile | Rust compile check |
+| `moon run :test` | Test | Rust test suite |
 | `moon run :ci` | CI Pipeline | `fmt → clippy → check → test` |
 | `moon run :quick` | Quick Check | `fmt → clippy` |
 
